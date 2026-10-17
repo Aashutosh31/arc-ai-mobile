@@ -3,6 +3,7 @@ import type { DrawerContentComponentProps } from 'expo-router/drawer';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { Alert, FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/ui';
 import { useAuthStore } from '@/store/authStore';
@@ -26,6 +27,7 @@ const NAV = [
 export function ConversationDrawer(props: DrawerContentComponentProps) {
   const theme = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const identity = useAuthStore((s) => s.identity);
   const credits = useAuthStore((s) => s.credits);
   const logout = useAuthStore((s) => s.logout);
@@ -86,7 +88,15 @@ export function ConversationDrawer(props: DrawerContentComponentProps) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.surface }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: theme.surface,
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom,
+        },
+      ]}>
       <View style={[styles.header, { borderBottomColor: theme.border }]}>
         <View style={styles.brandRow}>
           <View style={[styles.logo, { backgroundColor: theme.primary }]}>
