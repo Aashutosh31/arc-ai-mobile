@@ -103,6 +103,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       isProcessing: true,
     })),
 
+  // Append the raw delta verbatim. Sanitizing here would strip the trailing
+  // space that separates streamed words and glue them together (and mangle
+  // code). Cleanup is applied once, on finalize.
   appendChunk: (delta) => {
     if (!delta) return;
     set((s) => {
@@ -111,13 +114,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (last && last.sender === 'ai' && last.isStreaming) {
         messages[messages.length - 1] = {
           ...last,
-          text: sanitizeHistoryText(last.text + delta) as string,
+          text: last.text + delta,
         };
       } else {
         messages.push({
           id: nextLocalId(),
           sender: 'ai',
-          text: sanitizeHistoryText(delta) as string,
+          text: delta,
           isStreaming: true,
           interrupted: false,
           createdAt: Date.now(),
@@ -132,13 +135,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const messages = [...s.messages];
       const last = messages[messages.length - 1];
       if (last && last.sender === 'ai' && last.isStreaming) {
+        const base = sanitizeHistoryText(last.text) as string;
         messages[messages.length - 1] = {
           ...last,
           isStreaming: false,
           interrupted: Boolean(opts?.interrupted),
-          text: opts?.interrupted
-            ? `${last.text}${last.text ? '\n\n' : ''}[stopped]`
-            : last.text,
+          text: opts?.interrupted ? `${base}${base ? '\n\n' : ''}[stopped]` : base,
         };
       }
       return { messages, isStreaming: false, isProcessing: false, agentStatus: null };

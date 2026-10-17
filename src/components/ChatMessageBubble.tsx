@@ -5,17 +5,29 @@ import { Image, Pressable, StyleSheet, View } from 'react-native';
 
 import { MarkdownMessage } from '@/components/MarkdownMessage';
 import { ThemedText } from '@/components/ui';
+import { regenerateLast } from '@/chat/chatController';
 import type { UiMessage } from '@/store/chatStore';
 import { useTheme } from '@/store/themeStore';
 import { FontSize, Spacing } from '@/theme/layout';
 
-export function ChatMessageBubble({ message }: { message: UiMessage }) {
+export function ChatMessageBubble({
+  message,
+  showActions = false,
+}: {
+  message: UiMessage;
+  showActions?: boolean;
+}) {
   const theme = useTheme();
   const isUser = message.sender === 'user';
 
   const copy = async () => {
     await Clipboard.setStringAsync(message.text).catch(() => {});
     Haptics.selectionAsync().catch(() => {});
+  };
+
+  const onRegenerate = () => {
+    Haptics.selectionAsync().catch(() => {});
+    regenerateLast();
   };
 
   return (
@@ -75,6 +87,27 @@ export function ChatMessageBubble({ message }: { message: UiMessage }) {
             stopped
           </ThemedText>
         ) : null}
+
+        {showActions && !isUser ? (
+          <View style={[styles.actions, { borderTopColor: theme.border }]}>
+            <Pressable onPress={copy} hitSlop={6} accessibilityRole="button" accessibilityLabel="Copy message">
+              <View style={styles.actionBtn}>
+                <Ionicons name="copy-outline" size={15} color={theme.foregroundMuted} />
+                <ThemedText variant="caption" color={theme.foregroundMuted}>
+                  Copy
+                </ThemedText>
+              </View>
+            </Pressable>
+            <Pressable onPress={onRegenerate} hitSlop={6} accessibilityRole="button" accessibilityLabel="Regenerate response">
+              <View style={styles.actionBtn}>
+                <Ionicons name="refresh-outline" size={15} color={theme.foregroundMuted} />
+                <ThemedText variant="caption" color={theme.foregroundMuted}>
+                  Regenerate
+                </ThemedText>
+              </View>
+            </Pressable>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -123,6 +156,14 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   image: { width: 200, height: 200, marginBottom: Spacing.sm },
+  actions: {
+    flexDirection: 'row',
+    gap: Spacing.lg,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   docRow: {
     flexDirection: 'row',
     alignItems: 'center',

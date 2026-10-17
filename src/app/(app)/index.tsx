@@ -44,7 +44,17 @@ export default function ChatScreen() {
         ref={listRef}
         data={messages}
         keyExtractor={(item, index) => item.id ?? `msg-${index}`}
-        renderItem={({ item }) => <ChatMessageBubble message={item} />}
+        renderItem={({ item, index }) => (
+          <ChatMessageBubble
+            message={item}
+            showActions={
+              index === messages.length - 1 &&
+              item.sender === 'ai' &&
+              !item.isStreaming &&
+              Boolean(item.text)
+            }
+          />
+        )}
         contentContainerStyle={styles.listContent}
         keyboardShouldPersistTaps="handled"
         onContentSizeChange={scrollToEnd}

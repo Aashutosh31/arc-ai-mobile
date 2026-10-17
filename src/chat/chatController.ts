@@ -21,12 +21,21 @@ export function submitTurn(input: SubmitTurnInput): void {
   const text = String(input.text || '').trim();
   if (!text && !input.image && !input.document) return;
   const chat = useChatStore.getState();
+
+  chat.addUserMessage(text, {
+    image: input.image ?? undefined,
+    documentName: input.document?.name,
+  });
+  emitTurn(input);
+}
+
+/** Emit a turn without pushing a new user bubble (used by regenerate). */
+function emitTurn(input: SubmitTurnInput): void {
+  const text = String(input.text || '').trim();
+  if (!text && !input.image && !input.document) return;
+  const chat = useChatStore.getState();
   const socket = getSocket();
   if (!socket || !socket.connected) {
-    chat.addUserMessage(text, {
-      image: input.image ?? undefined,
-      documentName: input.document?.name,
-    });
     chat.appendSystemError(
       socket
         ? 'Still connecting to ARC-AI. Please try again in a moment.'
@@ -36,10 +45,6 @@ export function submitTurn(input: SubmitTurnInput): void {
     return;
   }
 
-  chat.addUserMessage(text, {
-    image: input.image ?? undefined,
-    documentName: input.document?.name,
-  });
   chat.beginAssistantMessage();
   chat.setProcessing(true);
 
@@ -54,6 +59,33 @@ export function submitTurn(input: SubmitTurnInput): void {
   };
 
   socket.emit(SOCKET_EVENTS.turnSubmit, payload);
+}
+
+/**
+ * Re-run the last user turn. Drops any trailing assistant reply, then re-emits
+ * the most recent user message so the model regenerates its answer.
+ */
+export function regenerateLast(): void {
+  const chat = useChatStore.getState();
+  const messages = chat.messages;
+
+  let lastUserIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].sender === 'user') {
+      lastUserIdx = i;
+      break;
+    }
+  }
+  if (lastUserIdx === -1) return;
+
+  const userMsg = messages[lastUserIdx];
+  // Keep everything up to and including the last user message; drop the reply.
+  chat.setMessages(messages.slice(0, lastUserIdx + 1));
+
+  emitTurn({
+    text: userMsg.text,
+    image: userMsg.image ?? null,
+  });
 }
 
 /** Stop in-flight generation and finalize the streaming bubble. */
