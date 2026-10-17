@@ -239,7 +239,7 @@ export function Screen({ children, style }: { children: ReactNode; style?: ViewS
   const theme = useTheme();
   return (
     <SafeAreaView
-      edges={['top']}
+      edges={['left', 'right', 'bottom']}
       style={[{ flex: 1, backgroundColor: theme.background }, style]}>
       {children}
     </SafeAreaView>

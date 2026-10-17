@@ -49,13 +49,14 @@ export async function connectSocket(opts: ConnectOptions = {}): Promise<Socket> 
 
   socket = io(SOCKET_URL, {
     path: SOCKET_PATH,
-    transports: ['websocket', 'polling'],
-    withCredentials: true,
+    // Rely on socket.io's default transport order (polling first, then upgrade
+    // to websocket). Polling is the most network-compatible handshake and
+    // survives cold starts / proxies that throttle the WS upgrade.
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 8000,
-    timeout: 12000,
+    timeout: 20000,
     auth: (cb: (data: Record<string, unknown>) => void) => {
       buildAuth()
         .then((data) => cb(data))

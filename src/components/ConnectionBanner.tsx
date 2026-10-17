@@ -1,15 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/ui';
+import { SOCKET_URL } from '@/constants/config';
+import { getSocket } from '@/socket/socketClient';
 import { useChatStore } from '@/store/chatStore';
 import { useTheme } from '@/store/themeStore';
 import { Spacing } from '@/theme/layout';
 
 /**
  * Thin strip that surfaces the realtime connection state. Hidden while online;
- * shows a spinner while connecting and the error/offline reason otherwise, so a
- * stalled turn is never silently invisible.
+ * otherwise shows a spinner (connecting) or the failure reason, plus the host
+ * being contacted and a tap-to-retry affordance.
  */
 export function ConnectionBanner() {
   const theme = useTheme();
@@ -21,17 +23,33 @@ export function ConnectionBanner() {
   const connecting = connection === 'connecting';
   const tint = connecting ? theme.foregroundMuted : theme.destructive;
 
+  const retry = () => {
+    const socket = getSocket();
+    if (socket) {
+      socket.connect();
+    }
+  };
+
   return (
-    <View style={[styles.wrap, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
+    <Pressable
+      onPress={connecting ? undefined : retry}
+      style={[styles.wrap, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
       {connecting ? (
         <ActivityIndicator size="small" color={tint} />
       ) : (
         <Ionicons name="cloud-offline-outline" size={16} color={tint} />
       )}
-      <ThemedText variant="caption" color={tint} numberOfLines={2} style={{ flex: 1 }}>
-        {connecting ? 'Connecting to ARC-AI…' : error || 'Offline. Messages can’t be sent right now.'}
-      </ThemedText>
-    </View>
+      <View style={{ flex: 1 }}>
+        <ThemedText variant="caption" color={tint} numberOfLines={2}>
+          {connecting
+            ? 'Connecting to ARC-AI…'
+            : `${error || 'Offline.'} Tap to retry.`}
+        </ThemedText>
+        <ThemedText variant="caption" numberOfLines={1}>
+          {SOCKET_URL}
+        </ThemedText>
+      </View>
+    </Pressable>
   );
 }
 

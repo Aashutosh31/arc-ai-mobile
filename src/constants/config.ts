@@ -16,15 +16,22 @@ function normalize(url?: string): string | undefined {
   return url.replace(/\/+$/, '');
 }
 
+/** scheme://host[:port] — strips any path/query so socket URLs stay clean. */
+function originOf(url: string): string {
+  const match = /^([a-z][a-z0-9+.-]*:\/\/[^/?#]+)/i.exec(url.trim());
+  return match ? match[1] : url;
+}
+
 /** Base origin for REST calls (no trailing slash). */
 export const API_URL = normalize(process.env.EXPO_PUBLIC_API_URL) ?? DEFAULT_HOST;
 
-/** Origin for the Socket.IO connection. */
-export const SOCKET_URL =
-  normalize(process.env.EXPO_PUBLIC_SOCKET_URL) ?? API_URL;
+/** Origin for the Socket.IO connection (never carries a path). */
+export const SOCKET_URL = originOf(
+  normalize(process.env.EXPO_PUBLIC_SOCKET_URL) ?? API_URL,
+);
 
 /** Every REST route is mounted under /api on the server. */
-export const API_BASE = `${API_URL}/api`;
+export const API_BASE = `${originOf(API_URL)}/api`;
 
 /** Socket.IO default path. */
 export const SOCKET_PATH = '/socket.io';

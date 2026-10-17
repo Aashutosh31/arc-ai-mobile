@@ -14,6 +14,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { submitTurn, stopGeneration } from '@/chat/chatController';
 import { useChatStore } from '@/store/chatStore';
@@ -35,6 +36,7 @@ async function readFileBase64(uri: string): Promise<string> {
 export function ChatInput() {
   const theme = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [text, setText] = useState('');
   const isProcessing = useChatStore((s) => s.isProcessing);
   const voiceActive = useVoiceStore((s) => s.active);
@@ -114,7 +116,15 @@ export function ChatInput() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background, borderTopColor: theme.border }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: theme.background,
+          borderTopColor: theme.border,
+          paddingBottom: Math.max(insets.bottom, Spacing.sm) + Spacing.xs,
+        },
+      ]}>
       {pendingImage || pendingDocument ? (
         <View style={styles.attachmentRow}>
           {pendingImage ? (
