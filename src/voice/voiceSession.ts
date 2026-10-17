@@ -41,7 +41,10 @@ function drainQueue() {
         sampleRate: VOICE_STREAM_FORMAT.sampleRate,
         channels: VOICE_STREAM_FORMAT.channels,
       },
-      audio: frame.bytes.buffer.slice(frame.bytes.byteOffset, frame.bytes.byteOffset + frame.bytes.byteLength),
+      // Sent as a plain byte array, NOT an ArrayBuffer/typed array: React
+      // Native forbids building a Blob from binary, which engine.io's polling
+      // transport does when binary is sent. The server accepts number arrays.
+      audio: Array.from(frame.bytes),
     });
   }
 }
@@ -149,7 +152,8 @@ export function sendAudioBuffer(buffer: AudioStreamBuffer): void {
           sampleRate: VOICE_STREAM_FORMAT.sampleRate,
           channels: VOICE_STREAM_FORMAT.channels,
         },
-        audio: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+        // Byte array, not ArrayBuffer: see note in drainQueue above.
+        audio: Array.from(bytes),
       });
     } else {
       queued.push({ seq, bytes });
