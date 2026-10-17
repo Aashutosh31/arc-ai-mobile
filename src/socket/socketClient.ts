@@ -2,16 +2,16 @@ import { io, type Socket } from 'socket.io-client';
 
 import { SOCKET_PATH, SOCKET_URL } from '@/constants/config';
 import { authApi } from '@/api/auth';
+import { getAuthToken } from '@/api/tokenHolder';
 
 /**
  * Singleton Socket.IO connection to the ARC-AI realtime runtime.
  *
- * Auth uses the one-time handshake ticket (the same mechanism the web client
- * uses to avoid third-party cookies): the authenticated REST call issues a
- * short-lived ticket which is presented in `handshake.auth.ticket`.
- *
- * Binary audio frames (`voice:stt:audio` / `voice:tts:audio`) require a
- * binary-capable transport, so websocket is preferred.
+ * Auth uses the one-time handshake ticket (same mechanism as the web client),
+ * AND includes the raw JWT as a fallback for servers/branches that do not
+ * expose the ticket endpoint. Because tickets are single-use and Socket.IO
+ * re-sends its `auth` payload on every (re)connection attempt, `auth` is
+ * supplied as a FUNCTION so each attempt fetches a fresh ticket.
  */
 let socket: Socket | null = null;
 
@@ -24,9 +24,7 @@ export interface ConnectOptions {
   getTicket?: () => Promise<{ ticket: string; expiresInMs: number }>;
 }
 
-export async function connectSocket(
-  opts: ConnectOptions = {},
-): Promise<Socket> {
+export async function connectSocket(opts: ConnectOptions = {}): Promise<Socket> {
   if (socket?.connected) return socket;
   if (socket) {
     socket.disconnect();
@@ -34,25 +32,35 @@ export async function connectSocket(
   }
 
   const fetchTicket = opts.getTicket ?? (() => authApi.socketTicket());
-  let ticket: string | undefined;
-  try {
-    const res = await fetchTicket();
-    ticket = res.ticket;
-  } catch {
-    // Fall back to cookie/Bearer-less auth; the server will reject if invalid.
-    ticket = undefined;
-  }
+
+  const buildAuth = async (): Promise<Record<string, unknown>> => {
+    const token = getAuthToken() ?? undefined;
+    let ticket: string | undefined;
+    try {
+      const res = await fetchTicket();
+      ticket = res?.ticket;
+    } catch {
+      // Ticket unavailable (older backend / not authenticated yet) — the
+      // server still accepts the JWT in `auth.token`.
+      ticket = undefined;
+    }
+    return { ticket, token };
+  };
 
   socket = io(SOCKET_URL, {
     path: SOCKET_PATH,
-    transports: ['websocket'],
+    transports: ['websocket', 'polling'],
     withCredentials: true,
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 8000,
     timeout: 12000,
-    auth: { ticket },
+    auth: (cb: (data: Record<string, unknown>) => void) => {
+      buildAuth()
+        .then((data) => cb(data))
+        .catch(() => cb({ token: getAuthToken() ?? undefined }));
+    },
   });
 
   return socket;
@@ -61,6 +69,7 @@ export async function connectSocket(
 export function disconnectSocket(): void {
   if (socket) {
     socket.removeAllListeners();
+    socket.auth = {};
     socket.disconnect();
     socket = null;
   }
@@ -72,7 +81,7 @@ export function emitEvent(
   payload?: unknown,
   ack?: (...args: unknown[]) => void,
 ): void {
-  if (!socket) return;
+  if (!socket || !socket.connected) return;
   if (ack) socket.emit(event, payload ?? {}, ack);
   else socket.emit(event, payload ?? {});
 }

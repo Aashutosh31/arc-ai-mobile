@@ -22,12 +22,17 @@ export function submitTurn(input: SubmitTurnInput): void {
   if (!text && !input.image && !input.document) return;
   const chat = useChatStore.getState();
   const socket = getSocket();
-  if (!socket) {
+  if (!socket || !socket.connected) {
     chat.addUserMessage(text, {
       image: input.image ?? undefined,
       documentName: input.document?.name,
     });
-    chat.appendSystemError('Not connected to ARC-AI. Check your connection and try again.');
+    chat.appendSystemError(
+      socket
+        ? 'Still connecting to ARC-AI. Please try again in a moment.'
+        : 'Not signed in to ARC-AI. Please sign in and try again.',
+    );
+    socket?.connect();
     return;
   }
 

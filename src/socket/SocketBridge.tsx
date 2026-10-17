@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
+import type { Socket } from 'socket.io-client';
 
 import { registerSocketHandlers } from '@/socket/registerHandlers';
-import { connectSocket, disconnectSocket, getSocket } from '@/socket/socketClient';
+import { connectSocket, disconnectSocket } from '@/socket/socketClient';
 import { useApprovalStore } from '@/store/approvalStore';
 import { useAuthStore } from '@/store/authStore';
 import { useChatStore } from '@/store/chatStore';
@@ -24,34 +25,54 @@ export function SocketBridge() {
       detachRef.current?.();
       detachRef.current = null;
       disconnectSocket();
+      useChatStore.getState().setConnection('offline', null);
       return;
     }
 
     let disposed = false;
+    let attached: Socket | null = null;
 
-    const bootstrap = async () => {
-      const socket = await connectSocket();
-      if (disposed) return;
-
-      const reload = () => {
-        void useWorkspaceStore.getState().load();
-        void useConversationStore.getState().load();
-      };
-      socket.on('connect', reload);
-
-      detachRef.current?.();
-      detachRef.current = registerSocketHandlers(socket);
-
-      if (socket.connected) reload();
+    const reload = () => {
+      void useWorkspaceStore.getState().load();
+      void useConversationStore.getState().load();
+    };
+    const onConnect = () => {
+      useChatStore.getState().setConnection('online', null);
+      reload();
+    };
+    const onDisconnect = () => {
+      useChatStore.getState().setConnection('offline', 'Disconnected from ARC-AI.');
+    };
+    const onConnectError = (err: Error) => {
+      console.warn('[ARC] socket connect_error:', err?.message || err);
+      useChatStore
+        .getState()
+        .setConnection('offline', err?.message || 'Could not connect to ARC-AI.');
+      useChatStore.getState().setProcessing(false);
     };
 
-    void bootstrap();
+    useChatStore.getState().setConnection('connecting', null);
+
+    void connectSocket().then((socket) => {
+      if (disposed) return;
+      attached = socket;
+      detachRef.current?.();
+      detachRef.current = registerSocketHandlers(socket);
+      socket.on('connect', onConnect);
+      socket.on('disconnect', onDisconnect);
+      socket.on('connect_error', onConnectError);
+      if (socket.connected) onConnect();
+    });
 
     return () => {
       disposed = true;
       detachRef.current?.();
       detachRef.current = null;
-      getSocket()?.removeAllListeners('connect');
+      if (attached) {
+        attached.off('connect', onConnect);
+        attached.off('disconnect', onDisconnect);
+        attached.off('connect_error', onConnectError);
+      }
     };
   }, [token, status]);
 

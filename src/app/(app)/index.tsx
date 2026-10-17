@@ -1,11 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   StyleSheet,
   View,
 } from 'react-native';
@@ -14,6 +12,7 @@ import { AgentStatusBar } from '@/components/AgentStatusBar';
 import { ApprovalBanner } from '@/components/ApprovalBanner';
 import { ChatInput } from '@/components/ChatInput';
 import { ChatMessageBubble } from '@/components/ChatMessageBubble';
+import { ConnectionBanner } from '@/components/ConnectionBanner';
 import { ExecutionPanel } from '@/components/ExecutionPanel';
 import { MediaCard } from '@/components/MediaCard';
 import { ThemedText } from '@/components/ui';
@@ -23,7 +22,6 @@ import { Spacing } from '@/theme/layout';
 
 export default function ChatScreen() {
   const theme = useTheme();
-  const navigation = useNavigation();
   const messages = useChatStore((s) => s.messages);
   const listRef = useRef<FlatList<UiMessage>>(null);
 
@@ -40,18 +38,7 @@ export default function ChatScreen() {
       style={{ flex: 1, backgroundColor: theme.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}>
-      <View style={[styles.topBar, { borderBottomColor: theme.border }]}>
-        <Pressable
-          hitSlop={8}
-          onPress={() => (navigation as unknown as { openDrawer?: () => void }).openDrawer?.()}
-          style={styles.menuBtn}>
-          <Ionicons name="menu" size={24} color={theme.foreground} />
-        </Pressable>
-        <ThemedText variant="body" style={{ fontWeight: '700' }}>
-          ARC-AI
-        </ThemedText>
-        <View style={{ width: 40 }} />
-      </View>
+      <ConnectionBanner />
 
       <FlatList
         ref={listRef}
@@ -89,15 +76,6 @@ export default function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  menuBtn: { padding: Spacing.sm, width: 40 },
   listContent: { paddingVertical: Spacing.sm, flexGrow: 1 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.md, paddingVertical: Spacing.xxl },
   emptyLogo: {

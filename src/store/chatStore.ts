@@ -18,6 +18,8 @@ export interface MediaState {
   title: string;
 }
 
+export type ConnectionState = 'connecting' | 'online' | 'offline';
+
 interface ChatState {
   conversationId: string | null;
   messages: UiMessage[];
@@ -27,7 +29,10 @@ interface ChatState {
   agentStatus: string | null;
   providerInfo: { provider: string | null; fallbackUsed: boolean; detail: string } | null;
   media: MediaState | null;
+  connection: ConnectionState;
+  connectionError: string | null;
 
+  setConnection: (connection: ConnectionState, error?: string | null) => void;
   setConversationId: (id: string | null) => void;
   setMessages: (messages: UiMessage[]) => void;
   addUserMessage: (text: string, opts?: { image?: string; documentName?: string }) => void;
@@ -55,6 +60,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   agentStatus: null,
   providerInfo: null,
   media: null,
+  connection: 'connecting',
+  connectionError: null,
+
+  setConnection: (connection, error = null) => set({ connection, connectionError: error }),
 
   setConversationId: (id) => set({ conversationId: id }),
 
