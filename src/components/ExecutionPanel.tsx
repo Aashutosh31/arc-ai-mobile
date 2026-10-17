@@ -53,14 +53,25 @@ export function ExecutionPanel() {
                 </ThemedText>
               </View>
               {exec.steps.map((step) => (
-                <View key={step.stepId} style={[styles.stepRow, { borderLeftColor: tone(step.status) }]}>
-                  <Ionicons name={statusIcon[step.status]} size={13} color={tone(step.status)} />
-                  <ThemedText variant="caption" numberOfLines={1} style={{ flex: 1 }}>
-                    {step.tool}
-                  </ThemedText>
-                  <ThemedText variant="caption" color={tone(step.status)}>
-                    {step.status}
-                  </ThemedText>
+                <View key={step.stepId} style={styles.stepBlock}>
+                  <View style={[styles.stepRow, { borderLeftColor: tone(step.status) }]}>
+                    <Ionicons name={statusIcon[step.status]} size={13} color={tone(step.status)} />
+                    <ThemedText variant="caption" numberOfLines={1} style={{ flex: 1 }}>
+                      {step.tool}
+                    </ThemedText>
+                    <ThemedText variant="caption" color={tone(step.status)}>
+                      {step.status}
+                    </ThemedText>
+                  </View>
+                  {step.error ? (
+                    <ThemedText
+                      variant="caption"
+                      color={theme.destructive}
+                      numberOfLines={3}
+                      style={{ marginLeft: Spacing.xs + Spacing.sm }}>
+                      {step.error}
+                    </ThemedText>
+                  ) : null}
                 </View>
               ))}
               {exec.reason ? (
@@ -86,6 +97,7 @@ const styles = StyleSheet.create({
   },
   header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  stepBlock: { gap: 2 },
   stepRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -17,21 +18,51 @@ import { ExecutionPanel } from '@/components/ExecutionPanel';
 import { MediaCard } from '@/components/MediaCard';
 import { ThemedText } from '@/components/ui';
 import { useChatStore, type UiMessage } from '@/store/chatStore';
+import { useConversationStore } from '@/store/conversationStore';
 import { useTheme } from '@/store/themeStore';
 import { Spacing } from '@/theme/layout';
 
 export default function ChatScreen() {
   const theme = useTheme();
   const messages = useChatStore((s) => s.messages);
+  const hasMore = useConversationStore((s) => s.hasMore);
+  const loadingMore = useConversationStore((s) => s.loadingMore);
   const listRef = useRef<FlatList<UiMessage>>(null);
+  const lastIdRef = useRef<string | null>(null);
+  const prependingRef = useRef(false);
 
   const scrollToEnd = () => {
+    if (prependingRef.current) return;
     requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
   };
 
+  // Only auto-scroll when a NEW message is appended. Prepending older history
+  // keeps the last message id unchanged, so the viewport stays put.
   useEffect(() => {
-    scrollToEnd();
-  }, [messages.length]);
+    const last = messages[messages.length - 1];
+    const lastId = last?.id ?? null;
+    if (lastId !== lastIdRef.current) {
+      lastIdRef.current = lastId;
+      scrollToEnd();
+    }
+  }, [messages]);
+
+  const loadOlder = () => {
+    if (!hasMore || loadingMore || prependingRef.current) return;
+    prependingRef.current = true;
+    void useConversationStore
+      .getState()
+      .loadMore()
+      .finally(() => {
+        setTimeout(() => {
+          prependingRef.current = false;
+        }, 150);
+      });
+  };
+
+  const onScroll = (offsetY: number) => {
+    if (offsetY <= 48) loadOlder();
+  };
 
   return (
     <KeyboardAvoidingView
@@ -57,9 +88,19 @@ export default function ChatScreen() {
         )}
         contentContainerStyle={styles.listContent}
         keyboardShouldPersistTaps="handled"
-        onContentSizeChange={scrollToEnd}
+        onContentSizeChange={() => {
+          if (!prependingRef.current) scrollToEnd();
+        }}
+        onScroll={(e) => onScroll(e.nativeEvent.contentOffset.y)}
+        scrollEventThrottle={160}
+        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         ListHeaderComponent={
           <>
+            {loadingMore ? (
+              <View style={styles.loadingMore}>
+                <ActivityIndicator size="small" color={theme.primary} />
+              </View>
+            ) : null}
             <MediaCard />
             <ExecutionPanel />
             <ApprovalBanner />
@@ -87,6 +128,7 @@ export default function ChatScreen() {
 
 const styles = StyleSheet.create({
   listContent: { paddingVertical: Spacing.sm, flexGrow: 1 },
+  loadingMore: { paddingVertical: Spacing.sm, alignItems: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.md, paddingVertical: Spacing.xxl },
   emptyLogo: {
     width: 72,
