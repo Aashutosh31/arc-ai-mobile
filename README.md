@@ -119,7 +119,34 @@ this project already returns `{ ..., token }`; see
 The app uses native modules, so it must be built as a standalone/development
 binary — not run through Expo Go for the full feature set.
 
-### Option A — EAS Build (recommended, produces a signed APK)
+### Option A — GitHub Actions (easiest, no tools to install)
+
+A workflow at `.github/workflows/android-release.yml` builds the APK on
+GitHub's servers whenever you push a `v*` tag, and attaches it to a Release.
+
+1. Push the code and the workflow to GitHub (once):
+
+   ```bash
+   git add .
+   git commit -m "Add Android APK build workflow"
+   git push
+   ```
+
+2. Ship a version by pushing a tag:
+
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+
+3. Open the repository's **Actions** tab and watch the run (about 10 minutes).
+   When it finishes, go to **Releases** and download the `.apk`.
+
+To point the build at your own backend, add a repository variable named
+`EXPO_PUBLIC_API_URL` (Settings → Secrets and variables → Actions → Variables).
+If you leave it unset, the app's compiled-in default host is used.
+
+### Option B — EAS Build (signed APK, needs an Expo account)
 
 1. Install and sign in to the EAS CLI:
 
@@ -147,9 +174,7 @@ binary — not run through Expo Go for the full feature set.
    When the build finishes, download the `.apk` from the printed URL or from
    the Expo dashboard. EAS generates and stores a keystore for you automatically.
 
-### Option B — Local build (no Expo account)
-
-Requires Java 17 and the Android SDK.
+### Option C — Local build (no Expo account, needs Android SDK + JDK 17)
 
 ```bash
 npx expo prebuild --platform android --clean
@@ -158,9 +183,9 @@ cd android
 ```
 
 The APK is written to
-`android/app/build/outputs/apk/release/app-release.apk`. Note: a locally built
+`android/app/build/outputs/apk/release/app-release.apk`. A locally built
 release APK is signed with the debug keystore unless you configure your own
-release signing. For a properly signed, store-ready artifact prefer EAS.
+release signing; it is still installable for testing.
 
 ### Install on your phone
 
@@ -171,9 +196,10 @@ release signing. For a properly signed, store-ready artifact prefer EAS.
 
 ## Publish to a GitHub Release
 
-Attach the built APK to a release on this repository.
+If you used **Option A** (GitHub Actions), a Release is created and the APK is
+attached automatically when you push a `v*` tag — no extra steps.
 
-With the GitHub CLI:
+For a manually built APK, attach it yourself. With the GitHub CLI:
 
 ```bash
 gh release create v1.0.0 ./app-release.apk \

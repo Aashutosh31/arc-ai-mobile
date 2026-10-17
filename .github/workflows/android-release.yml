@@ -1,0 +1,70 @@
+name: Build Android APK
+
+# Creates a downloadable APK and attaches it to a GitHub Release.
+#
+# To ship a new version:
+#   git tag v1.0.0 && git push origin v1.0.0
+# The APK then appears on the "Releases" page. You can also run this
+# manually from the Actions tab (workflow_dispatch).
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --no-install
+        env:
+          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+        env:
+          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+
+      - name: Collect APK
+        run: |
+          mkdir -p output
+          cp android/app/build/outputs/apk/release/app-release.apk \
+             "output/arc-ai-${GITHUB_REF_NAME}.apk"
+
+      - name: Attach APK to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: output/*.apk
+          generate_release_notes: true
+
+      - name: Keep APK as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arc-ai-apk
+          path: output/*.apk
+          retention-days: 30
