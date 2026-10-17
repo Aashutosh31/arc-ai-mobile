@@ -5,12 +5,15 @@ import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { SocketBridge } from '@/socket/SocketBridge';
 import { useAuthStore } from '@/store/authStore';
+import { installGlobalErrorHandler } from '@/store/diagnosticsStore';
 import { useTheme } from '@/store/themeStore';
 import { VoiceCapture } from '@/voice/VoiceCapture';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+installGlobalErrorHandler();
 
 export default function RootLayout() {
   const theme = useTheme();
@@ -29,20 +32,22 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.background }}>
       <SafeAreaProvider>
         <StatusBar style={theme.colorScheme === 'dark' ? 'light' : 'dark'} />
-        <SocketBridge />
-        <VoiceCapture />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: theme.background },
-          }}>
-          <Stack.Screen name="(app)" />
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen
-            name="camera"
-            options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-          />
-        </Stack>
+        <ErrorBoundary>
+          <SocketBridge />
+          <VoiceCapture />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: theme.background },
+            }}>
+            <Stack.Screen name="(app)" />
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen
+              name="camera"
+              options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+            />
+          </Stack>
+        </ErrorBoundary>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

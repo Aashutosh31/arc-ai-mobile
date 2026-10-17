@@ -5,6 +5,7 @@ import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Card, Screen, Spinner, ThemedText } from '@/components/ui';
 import { extractApiError } from '@/api/client';
 import { mcpApi } from '@/api/integrations';
+import { TOOL_CATALOG, TOOL_COUNT } from '@/lib/toolCatalog';
 import { useTheme } from '@/store/themeStore';
 import { Spacing } from '@/theme/layout';
 
@@ -90,11 +91,67 @@ export default function ToolsScreen() {
           />
         }>
         <View style={styles.intro}>
-          <Ionicons name="construct-outline" size={22} color={theme.accent} />
-          <ThemedText variant="muted" style={{ flex: 1 }}>
-            Connect MCP servers to give ARC new capabilities. Tools are invoked
-            automatically during a conversation.
-          </ThemedText>
+          <Ionicons name="sparkles-outline" size={22} color={theme.accent} />
+          <View style={{ flex: 1 }}>
+            <ThemedText variant="body" style={{ fontWeight: '700' }}>
+              Native capabilities
+            </ThemedText>
+            <ThemedText variant="caption">
+              {TOOL_COUNT} tools ARC can invoke automatically while you chat.
+            </ThemedText>
+          </View>
+        </View>
+
+        {TOOL_CATALOG.map((category) => (
+          <Card key={category.id} style={styles.card}>
+            <View style={styles.categoryHeader}>
+              <Ionicons
+                name={category.icon as keyof typeof Ionicons.glyphMap}
+                size={18}
+                color={theme.primary}
+              />
+              <ThemedText variant="body" style={{ flex: 1, fontWeight: '600' }}>
+                {category.label}
+              </ThemedText>
+              <ThemedText variant="caption">{category.tools.length}</ThemedText>
+            </View>
+            {category.tools.map((tool) => (
+              <View key={tool.name} style={[styles.tool, { borderTopColor: theme.border }]}>
+                <View style={styles.toolHead}>
+                  <ThemedText variant="mono" style={{ flex: 1 }}>
+                    {tool.name}
+                  </ThemedText>
+                  {!tool.guestAllowed ? (
+                    <Ionicons name="lock-closed" size={12} color={theme.foregroundSubtle} />
+                  ) : null}
+                </View>
+                <ThemedText variant="caption" numberOfLines={2}>
+                  {tool.description}
+                </ThemedText>
+                {tool.params.length ? (
+                  <View style={styles.tags}>
+                    {tool.params.map((p) => (
+                      <View key={p} style={[styles.tag, { borderColor: theme.border }]}>
+                        <ThemedText variant="caption">{p}</ThemedText>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            ))}
+          </Card>
+        ))}
+
+        <View style={styles.intro}>
+          <Ionicons name="git-network-outline" size={22} color={theme.accent} />
+          <View style={{ flex: 1 }}>
+            <ThemedText variant="body" style={{ fontWeight: '700' }}>
+              MCP servers
+            </ThemedText>
+            <ThemedText variant="caption">
+              Connect Model Context Protocol servers to add custom tools.
+            </ThemedText>
+          </View>
         </View>
 
         {loading ? (
@@ -152,11 +209,14 @@ export default function ToolsScreen() {
 
 const styles = StyleSheet.create({
   content: { padding: Spacing.lg, gap: Spacing.md, paddingBottom: Spacing.xxl },
-  intro: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  card: { padding: Spacing.md, gap: Spacing.md },
+  intro: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginTop: Spacing.sm },
+  card: { padding: Spacing.md, gap: Spacing.sm },
+  categoryHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  tool: { gap: 2, paddingTop: Spacing.sm, borderTopWidth: StyleSheet.hairlineWidth },
+  toolHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   dot: { width: 10, height: 10, borderRadius: 5 },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, marginTop: 2 },
   tag: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: Spacing.sm,

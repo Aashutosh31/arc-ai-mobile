@@ -1,9 +1,17 @@
 import { useEffect } from 'react';
-import { useAudioStream } from 'expo-audio';
+import { setAudioModeAsync, useAudioStream } from 'expo-audio';
 
-import { VOICE_STREAM_FORMAT } from '@/constants/config';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useDiagnosticsStore } from '@/store/diagnosticsStore';
 import { useVoiceStore } from '@/store/voiceStore';
 import { sendAudioBuffer } from '@/voice/voiceSession';
+
+/**
+ * Hardware-friendly capture rate. The server expects 24 kHz PCM16, but not all
+ * Android devices can open an AudioRecord at 24 kHz, so we capture at the
+ * device-native 48 kHz and resample down in `sendAudioBuffer`.
+ */
+const CAPTURE_SAMPLE_RATE = 48000;
 
 /**
  * Mounts only while `captureActive` is true so the native microphone stream is
@@ -13,15 +21,24 @@ function Capture() {
   const { stream } = useAudioStream({
     channels: 1,
     encoding: 'int16',
-    sampleRate: VOICE_STREAM_FORMAT.sampleRate,
+    sampleRate: CAPTURE_SAMPLE_RATE,
     onBuffer: sendAudioBuffer,
   });
 
   useEffect(() => {
     let mounted = true;
-    stream.start().catch(() => {
-      if (mounted) useVoiceStore.getState().setError('Failed to start microphone capture.');
-    });
+    (async () => {
+      try {
+        // Recording requires the audio session to allow recording on Android.
+        await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+        await stream.start();
+      } catch (err) {
+        if (mounted) {
+          useVoiceStore.getState().setError('Failed to start microphone capture.');
+          useDiagnosticsStore.getState().record(err);
+        }
+      }
+    })();
     return () => {
       mounted = false;
       try {
@@ -29,6 +46,7 @@ function Capture() {
       } catch {
         // already stopped
       }
+      void setAudioModeAsync({ allowsRecording: false }).catch(() => {});
     };
   }, [stream]);
 
@@ -38,5 +56,9 @@ function Capture() {
 export function VoiceCapture() {
   const captureActive = useVoiceStore((s) => s.captureActive);
   if (!captureActive) return null;
-  return <Capture />;
+  return (
+    <ErrorBoundary compact onReset={() => useVoiceStore.getState().setCaptureActive(false)}>
+      <Capture />
+    </ErrorBoundary>
+  );
 }

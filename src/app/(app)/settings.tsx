@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { Button, Card, Divider, Screen, TextField, ThemedText } from '@/components/ui';
+import { GoogleCalendarCard } from '@/components/GoogleCalendarCard';
 import { linkGoogleAccount } from '@/auth/google';
 import { listThemes } from '@/theme/themes';
 import { useAuthStore } from '@/store/authStore';
@@ -74,6 +75,13 @@ export default function SettingsScreen() {
             />
           ) : null}
         </Card>
+
+        {identity?.authType !== 'guest' ? (
+          <>
+            <ThemedText variant="label">Integrations</ThemedText>
+            <GoogleCalendarCard />
+          </>
+        ) : null}
 
         <ThemedText variant="label">Appearance</ThemedText>
         <View style={styles.themeGrid}>

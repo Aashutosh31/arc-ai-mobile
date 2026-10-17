@@ -4,6 +4,7 @@ import { VOICE_STREAM_FORMAT } from '@/constants/config';
 import { VoiceInteractionMachine } from '@/lib/voice/voiceInteractionMachine';
 import { SOCKET_EVENTS } from '@/socket/events';
 import { emitEvent } from '@/socket/socketClient';
+import { useDiagnosticsStore } from '@/store/diagnosticsStore';
 import { useVoiceStore } from '@/store/voiceStore';
 import { resamplePcm16 } from '@/voice/pcm';
 import { ttsPlayer } from '@/voice/ttsPlayer';
@@ -93,14 +94,19 @@ export const voiceMachine = new VoiceInteractionMachine({
 export async function toggleVoice(): Promise<void> {
   const store = useVoiceStore.getState();
   if (!store.active) {
-    const perm = await requestRecordingPermissionsAsync();
-    store.setMicPermission(perm.granted ? 'granted' : 'denied');
-    if (!perm.granted) {
-      store.setError('Microphone permission is required for voice mode.');
-      return;
+    try {
+      const perm = await requestRecordingPermissionsAsync();
+      store.setMicPermission(perm.granted ? 'granted' : 'denied');
+      if (!perm.granted) {
+        store.setError('Microphone permission is required for voice mode.');
+        return;
+      }
+      store.setError(null);
+      voiceMachine.activate();
+    } catch (err) {
+      store.setError('Could not start voice mode.');
+      useDiagnosticsStore.getState().record(err);
     }
-    store.setError(null);
-    voiceMachine.activate();
     return;
   }
   if (store.mode === 'listening') {
@@ -120,31 +126,38 @@ export function deactivateVoice(): void {
 
 /** Forward a captured PCM buffer to the STT stream (resampled to 24 kHz). */
 export function sendAudioBuffer(buffer: AudioStreamBuffer): void {
-  if (!buffer?.data) return;
-  if (framesSent >= MAX_FRAMES) return;
-  const raw = new Uint8Array(buffer.data);
-  const actualRate = buffer.sampleRate || VOICE_STREAM_FORMAT.sampleRate;
-  const bytes =
-    actualRate === VOICE_STREAM_FORMAT.sampleRate
-      ? raw
-      : resamplePcm16(raw, actualRate, VOICE_STREAM_FORMAT.sampleRate);
+  // This runs inside a native buffer callback: never let a bad frame throw
+  // out of it (that would be an uncaught error on the JS thread).
+  try {
+    if (!buffer?.data) return;
+    if (framesSent >= MAX_FRAMES) return;
+    const raw = new Uint8Array(buffer.data);
+    const actualRate = buffer.sampleRate || VOICE_STREAM_FORMAT.sampleRate;
+    const bytes =
+      actualRate === VOICE_STREAM_FORMAT.sampleRate
+        ? raw
+        : resamplePcm16(raw, actualRate, VOICE_STREAM_FORMAT.sampleRate);
 
-  seq += 1;
-  framesSent += 1;
-  if (sessionId) {
-    emitEvent(SOCKET_EVENTS.sttAudio, {
-      sessionId,
-      seq,
-      format: {
-        encoding: VOICE_STREAM_FORMAT.encoding,
-        sampleRate: VOICE_STREAM_FORMAT.sampleRate,
-        channels: VOICE_STREAM_FORMAT.channels,
-      },
-      audio: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
-    });
-  } else {
-    queued.push({ seq, bytes });
-    if (queued.length > MAX_QUEUED) queued.shift();
+    seq += 1;
+    framesSent += 1;
+    if (sessionId) {
+      emitEvent(SOCKET_EVENTS.sttAudio, {
+        sessionId,
+        seq,
+        format: {
+          encoding: VOICE_STREAM_FORMAT.encoding,
+          sampleRate: VOICE_STREAM_FORMAT.sampleRate,
+          channels: VOICE_STREAM_FORMAT.channels,
+        },
+        audio: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+      });
+    } else {
+      queued.push({ seq, bytes });
+      if (queued.length > MAX_QUEUED) queued.shift();
+    }
+  } catch (err) {
+    useVoiceStore.getState().setError('Microphone stream error.');
+    useDiagnosticsStore.getState().record(err);
   }
 }
 
