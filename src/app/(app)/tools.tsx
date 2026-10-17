@@ -1,11 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button, Card, Screen, Spinner, ThemedText } from '@/components/ui';
 import { extractApiError } from '@/api/client';
 import { mcpApi } from '@/api/integrations';
-import { TOOL_CATALOG, TOOL_COUNT } from '@/lib/toolCatalog';
+import { TOOL_CATALOG, TOOL_COUNT, type ToolCatalogEntry } from '@/lib/toolCatalog';
+import { useAuthStore } from '@/store/authStore';
+import { useComposerStore } from '@/store/composerStore';
 import { useTheme } from '@/store/themeStore';
 import { Spacing } from '@/theme/layout';
 
@@ -36,11 +39,19 @@ function normalizeServers(data: unknown): McpServer[] {
 
 export default function ToolsScreen() {
   const theme = useTheme();
+  const router = useRouter();
+  const authStatus = useAuthStore((s) => s.status);
+  const isGuest = authStatus === 'guest';
   const [servers, setServers] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const tryTool = (tool: ToolCatalogEntry) => {
+    useComposerStore.getState().setText(tool.example);
+    router.navigate('/');
+  };
 
   const load = useCallback(async () => {
     setError(null);
@@ -115,30 +126,55 @@ export default function ToolsScreen() {
               </ThemedText>
               <ThemedText variant="caption">{category.tools.length}</ThemedText>
             </View>
-            {category.tools.map((tool) => (
-              <View key={tool.name} style={[styles.tool, { borderTopColor: theme.border }]}>
-                <View style={styles.toolHead}>
-                  <ThemedText variant="mono" style={{ flex: 1 }}>
-                    {tool.name}
+            {category.tools.map((tool) => {
+              const locked = !tool.guestAllowed && isGuest;
+              return (
+                <View key={tool.name} style={[styles.tool, { borderTopColor: theme.border }]}>
+                  <View style={styles.toolHead}>
+                    <ThemedText variant="mono" style={{ flex: 1 }}>
+                      {tool.name}
+                    </ThemedText>
+                    {!tool.guestAllowed ? (
+                      <Ionicons name="lock-closed" size={12} color={theme.foregroundSubtle} />
+                    ) : null}
+                    <Pressable
+                      onPress={() => tryTool(tool)}
+                      disabled={locked}
+                      hitSlop={6}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Try ${tool.name}`}
+                      style={[
+                        styles.tryBtn,
+                        {
+                          borderColor: locked ? theme.border : theme.primary,
+                          opacity: locked ? 0.5 : 1,
+                        },
+                      ]}>
+                      <ThemedText variant="caption" color={locked ? theme.foregroundSubtle : theme.primary}>
+                        Try it
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                  <ThemedText variant="caption" numberOfLines={2}>
+                    {tool.description}
                   </ThemedText>
-                  {!tool.guestAllowed ? (
-                    <Ionicons name="lock-closed" size={12} color={theme.foregroundSubtle} />
+                  {tool.params.length ? (
+                    <View style={styles.tags}>
+                      {tool.params.map((p) => (
+                        <View key={p} style={[styles.tag, { borderColor: theme.border }]}>
+                          <ThemedText variant="caption">{p}</ThemedText>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+                  {locked ? (
+                    <ThemedText variant="caption" color={theme.warning}>
+                      Sign in to use this tool.
+                    </ThemedText>
                   ) : null}
                 </View>
-                <ThemedText variant="caption" numberOfLines={2}>
-                  {tool.description}
-                </ThemedText>
-                {tool.params.length ? (
-                  <View style={styles.tags}>
-                    {tool.params.map((p) => (
-                      <View key={p} style={[styles.tag, { borderColor: theme.border }]}>
-                        <ThemedText variant="caption">{p}</ThemedText>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-              </View>
-            ))}
+              );
+            })}
           </Card>
         ))}
 
@@ -214,6 +250,12 @@ const styles = StyleSheet.create({
   categoryHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   tool: { gap: 2, paddingTop: Spacing.sm, borderTopWidth: StyleSheet.hairlineWidth },
   toolHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  tryBtn: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+  },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   dot: { width: 10, height: 10, borderRadius: 5 },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, marginTop: 2 },

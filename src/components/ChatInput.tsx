@@ -3,7 +3,6 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
 import {
   ActionSheetIOS,
   Alert,
@@ -37,13 +36,14 @@ export function ChatInput() {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [text, setText] = useState('');
   const isProcessing = useChatStore((s) => s.isProcessing);
   const voiceActive = useVoiceStore((s) => s.active);
   const voiceMode = useVoiceStore((s) => s.mode);
   const interim = useVoiceStore((s) => s.interim);
   const pendingImage = useComposerStore((s) => s.pendingImage);
   const pendingDocument = useComposerStore((s) => s.pendingDocument);
+  const text = useComposerStore((s) => s.text);
+  const setText = useComposerStore((s) => s.setText);
   const composer = useComposerStore();
 
   const canSend = Boolean(text.trim() || pendingImage || pendingDocument);

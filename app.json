@@ -2,7 +2,7 @@
   "expo": {
     "name": "ARC-AI",
     "slug": "arc-ai-mobile",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "arcaimobile",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.arcai.mobile",
-      "versionCode": 7,
+      "versionCode": 8,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
