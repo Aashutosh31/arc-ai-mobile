@@ -14,8 +14,8 @@ import { useAuthStore } from '@/store/authStore';
 export async function signInWithGoogle(): Promise<void> {
   const set = useAuthStore.setState;
   try {
-    const url = await authApi.googleUrl();
     const redirectUrl = Linking.createURL('auth');
+    const url = await authApi.googleUrl(redirectUrl);
     const result = await WebBrowser.openAuthSessionAsync(url, redirectUrl);
     if (result.type !== 'success' || !result.url) return;
 
@@ -42,8 +42,8 @@ export async function signInWithGoogle(): Promise<void> {
 export async function linkGoogleAccount(): Promise<boolean> {
   const set = useAuthStore.setState;
   try {
-    const url = await authApi.googleLinkUrl();
     const redirectUrl = Linking.createURL('auth-link');
+    const url = await authApi.googleLinkUrl(redirectUrl);
     const result = await WebBrowser.openAuthSessionAsync(url, redirectUrl);
     if (result.type !== 'success' || !result.url) return false;
     const parsed = Linking.parse(result.url);

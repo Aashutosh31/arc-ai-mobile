@@ -35,14 +35,16 @@ export const authApi = {
   logout: async (): Promise<void> => {
     await http.post('/auth/logout');
   },
-  googleUrl: async (): Promise<string> => {
-    const { data } = await http.get<{ success: boolean; url: string }>('/auth/google/url');
+  googleUrl: async (redirect?: string): Promise<string> => {
+    const { data } = await http.get<{ success: boolean; url: string }>('/auth/google/url', {
+      params: redirect ? { redirect } : undefined,
+    });
     return data.url;
   },
-  googleLinkUrl: async (): Promise<string> => {
-    const { data } = await http.get<{ success: boolean; url: string }>(
-      '/auth/google/link-url',
-    );
+  googleLinkUrl: async (redirect?: string): Promise<string> => {
+    const { data } = await http.get<{ success: boolean; url: string }>('/auth/google/link-url', {
+      params: redirect ? { redirect } : undefined,
+    });
     return data.url;
   },
   exchangeSession: async (
