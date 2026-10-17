@@ -3,11 +3,10 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
+import { type ComponentRef, useRef, useState } from 'react';
 import {
-  ActionSheetIOS,
   Alert,
   Image,
-  Platform,
   Pressable,
   StyleSheet,
   TextInput,
@@ -16,6 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { submitTurn, stopGeneration } from '@/chat/chatController';
+import { AttachMenu, type AttachMenuEntry } from '@/components/AttachMenu';
 import { useChatStore } from '@/store/chatStore';
 import { useComposerStore } from '@/store/composerStore';
 import { useTheme } from '@/store/themeStore';
@@ -45,6 +45,14 @@ export function ChatInput() {
   const text = useComposerStore((s) => s.text);
   const setText = useComposerStore((s) => s.setText);
   const composer = useComposerStore();
+  const plusRef = useRef<ComponentRef<typeof View>>(null);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
 
   const canSend = Boolean(text.trim() || pendingImage || pendingDocument);
 
@@ -89,31 +97,78 @@ export function ChatInput() {
     }
   };
 
-  const openAttachMenu = () => {
-    const options = ['Photo library', 'Document', 'Camera'];
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: [...options, 'Cancel'], cancelButtonIndex: options.length },
-        (idx) => {
-          if (idx === 0) void pickImage();
-          if (idx === 1) void pickDocument();
-          if (idx === 2) router.push('/camera');
-        },
-      );
-      return;
-    }
-    Alert.alert('Attach', undefined, [
-      { text: 'Photo library', onPress: () => void pickImage() },
-      { text: 'Document', onPress: () => void pickDocument() },
-      { text: 'Camera', onPress: () => router.push('/camera') },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  };
+  const closeMenu = () => setMenuVisible(false);
 
   const onMic = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     void toggleVoice();
   };
+
+  const openAttachMenu = () => {
+    if (menuVisible) {
+      closeMenu();
+      return;
+    }
+    plusRef.current?.measureInWindow((x, y, width, height) => {
+      setMenuAnchor({ x, y, width, height });
+      setMenuVisible(true);
+    });
+  };
+
+  const attachEntries: AttachMenuEntry[] = [
+    {
+      type: 'item',
+      key: 'image',
+      icon: 'image-outline',
+      label: 'Upload image',
+      onPress: () => {
+        closeMenu();
+        void pickImage();
+      },
+    },
+    {
+      type: 'item',
+      key: 'document',
+      icon: 'document-text-outline',
+      label: 'Upload document',
+      onPress: () => {
+        closeMenu();
+        void pickDocument();
+      },
+    },
+    { type: 'divider' },
+    {
+      type: 'item',
+      key: 'camera',
+      icon: 'camera-outline',
+      label: 'Camera / Vision',
+      hint: 'live',
+      onPress: () => {
+        closeMenu();
+        router.push('/camera');
+      },
+    },
+    {
+      type: 'item',
+      key: 'voice',
+      icon: 'mic-outline',
+      label: 'Voice mode',
+      onPress: () => {
+        closeMenu();
+        onMic();
+      },
+    },
+    {
+      type: 'item',
+      key: 'tools',
+      icon: 'construct-outline',
+      label: 'Browse tools',
+      onPress: () => {
+        closeMenu();
+        router.navigate('/tools');
+      },
+    },
+  ];
 
   return (
     <View
@@ -162,12 +217,14 @@ export function ChatInput() {
       ) : null}
 
       <View style={styles.inputRow}>
-        <Pressable
-          hitSlop={8}
-          onPress={openAttachMenu}
-          style={({ pressed }) => [styles.iconBtn, { opacity: pressed ? 0.6 : 1 }]}>
-          <Ionicons name="add" size={26} color={theme.foreground} />
-        </Pressable>
+        <View ref={plusRef} collapsable={false}>
+          <Pressable
+            hitSlop={8}
+            onPress={openAttachMenu}
+            style={({ pressed }) => [styles.iconBtn, { opacity: pressed ? 0.6 : 1 }]}>
+            <Ionicons name="add" size={26} color={theme.foreground} />
+          </Pressable>
+        </View>
 
         <TextInput
           value={text}
@@ -230,6 +287,13 @@ export function ChatInput() {
           </Pressable>
         )}
       </View>
+
+      <AttachMenu
+        visible={menuVisible}
+        anchor={menuAnchor}
+        entries={attachEntries}
+        onClose={closeMenu}
+      />
     </View>
   );
 }
