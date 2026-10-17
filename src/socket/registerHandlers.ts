@@ -1,0 +1,244 @@
+import type { Socket } from 'socket.io-client';
+
+import { VOICE_STREAM_FORMAT } from '@/constants/config';
+import { applyClientAction, type ClientAction } from '@/socket/clientActions';
+import { SOCKET_EVENTS } from '@/socket/events';
+import { useApprovalStore } from '@/store/approvalStore';
+import { useAuthStore } from '@/store/authStore';
+import { useChatStore } from '@/store/chatStore';
+import { useConversationStore } from '@/store/conversationStore';
+import { useExecutionStore } from '@/store/executionStore';
+import { useVoiceStore } from '@/store/voiceStore';
+import { useWorkspaceStore } from '@/store/workspaceStore';
+import { toPcm16Bytes } from '@/voice/pcm';
+import { ttsPlayer } from '@/voice/ttsPlayer';
+import {
+  notifyAssistantDone,
+  notifySttCancelled,
+  notifySttEnd,
+  notifySttError,
+  notifySttFinal,
+  notifySttInterim,
+  notifySttSpeechStart,
+  notifySttStarted,
+  notifyTtsEnded,
+  notifyTtsStarted,
+} from '@/voice/voiceSession';
+
+type Any = Record<string, any>;
+
+const s = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+/** Attach all realtime handlers to the socket; returns a detach function. */
+export function registerSocketHandlers(socket: Socket): () => void {
+  const chat = () => useChatStore.getState();
+  const offs: (() => void)[] = [];
+  const on = (event: string, handler: (...args: any[]) => void) => {
+    socket.on(event, handler);
+    offs.push(() => socket.off(event, handler));
+  };
+
+  // ---- Chat streaming -------------------------------------------------------
+  on(SOCKET_EVENTS.responseChunk, (payload: Any) => {
+    const delta = s(payload?.displayText) || s(payload?.chunk) || s(payload?.text);
+    if (payload?.conversationId) chat().setConversationId(s(payload.conversationId));
+    if (delta) chat().appendChunk(delta);
+    if (payload?.isFinal || payload?.final) {
+      chat().finishAssistantStream();
+      notifyAssistantDone();
+    }
+  });
+
+  on(SOCKET_EVENTS.agentStatus, (payload: Any) => {
+    const status = s(payload?.status) || s(payload);
+    chat().setAgentStatus(status || null);
+    if (status) chat().setProcessing(true);
+  });
+
+  on(SOCKET_EVENTS.providerInfo, (payload: Any) => {
+    chat().setProviderInfo({
+      provider: payload?.provider ?? null,
+      fallbackUsed: Boolean(payload?.fallbackUsed),
+      detail: s(payload?.detail) || s(payload?.message),
+    });
+  });
+
+  on(SOCKET_EVENTS.creditsUpdate, (payload: Any) => {
+    const credits = Number(payload?.credits ?? payload?.creditsRemaining);
+    if (Number.isFinite(credits)) useAuthStore.getState().setCredits(credits);
+  });
+
+  on(SOCKET_EVENTS.conversationCreated, (payload: Any) => {
+    const id = s(payload?.conversationId) || s(payload?.id);
+    if (id) chat().setConversationId(id);
+    void useConversationStore.getState().load();
+  });
+
+  on(SOCKET_EVENTS.conversationTitle, (payload: Any) => {
+    const id = s(payload?.conversationId);
+    const title = s(payload?.title);
+    if (id && title) {
+      useConversationStore.getState().updateTitleLocally(id, title);
+      void useConversationStore.getState().load();
+    }
+  });
+
+  on(SOCKET_EVENTS.clientAction, (payload: Any) => {
+    const action: ClientAction | undefined = payload?.action ?? payload;
+    if (action) void applyClientAction(action);
+  });
+
+  on(SOCKET_EVENTS.botError, (payload: Any) => {
+    const message = s(payload?.message) || s(payload?.error) || 'Something went wrong.';
+    chat().appendSystemError(message);
+    notifySttError(message);
+  });
+
+  // ---- TTS playback ---------------------------------------------------------
+  on(SOCKET_EVENTS.ttsMode, (payload: Any) => {
+    const mode = s(payload?.mode) || s(payload);
+    if (mode === 'server' || mode === 'browser' || mode === 'off') {
+      useVoiceStore.getState().setTtsMode(mode);
+    }
+  });
+
+  on(SOCKET_EVENTS.voiceTtsStart, (payload: Any) => {
+    const streamId = s(payload?.streamId) || 'tts';
+    const sampleRate = Number(payload?.sampleRate) || undefined;
+    notifyTtsStarted();
+    void ttsPlayer.beginStream(streamId, sampleRate);
+  });
+
+  on(SOCKET_EVENTS.voiceTtsAudio, (payload: Any) => {
+    const bytes = toPcm16Bytes(payload?.audio ?? payload);
+    if (!bytes) return;
+    const sampleRate = Number(payload?.sampleRate);
+    const segmentIndex =
+      typeof payload?.segmentIndex === 'number' ? payload.segmentIndex : undefined;
+    ttsPlayer.pushFrame(
+      s(payload?.streamId) || 'tts',
+      bytes,
+      segmentIndex,
+      Number.isFinite(sampleRate) && sampleRate > 0 ? sampleRate : VOICE_STREAM_FORMAT.sampleRate,
+    );
+  });
+
+  on(SOCKET_EVENTS.voiceTtsEnd, (payload: Any) => {
+    ttsPlayer.endStream(s(payload?.streamId) || undefined);
+    notifyTtsEnded();
+  });
+
+  on(SOCKET_EVENTS.voiceTtsError, () => {
+    void ttsPlayer.cancel();
+    notifyTtsEnded();
+  });
+
+  on(SOCKET_EVENTS.voiceTtsCancel, () => {
+    void ttsPlayer.cancel();
+    notifyTtsEnded();
+  });
+
+  // ---- Streaming STT --------------------------------------------------------
+  on(SOCKET_EVENTS.sttStarted, (payload: Any) => notifySttStarted(s(payload?.sessionId)));
+  on(SOCKET_EVENTS.sttInterim, (payload: Any) => notifySttInterim(s(payload?.text)));
+  on(SOCKET_EVENTS.sttSpeechStart, () => notifySttSpeechStart());
+  on(SOCKET_EVENTS.sttFinal, (payload: Any) => notifySttFinal(s(payload?.text)));
+  on(SOCKET_EVENTS.sttEnd, () => notifySttEnd());
+  on(SOCKET_EVENTS.sttError, (payload: Any) =>
+    notifySttError(s(payload?.message) || s(payload?.error) || 'Speech recognition failed.'),
+  );
+  on(SOCKET_EVENTS.sttCancelled, () => notifySttCancelled());
+
+  // ---- Workspaces -----------------------------------------------------------
+  on(SOCKET_EVENTS.workspaceSwitched, (payload: Any) => {
+    const workspace = payload?.workspace ?? payload;
+    if (workspace?._id) {
+      useWorkspaceStore.getState().setActive(workspace);
+      void useConversationStore.getState().load();
+      chat().reset();
+    }
+  });
+
+  on(SOCKET_EVENTS.workspaceError, (payload: Any) => {
+    console.warn('[ARC] workspace error:', payload?.message || payload);
+  });
+
+  // ---- Approvals ------------------------------------------------------------
+  on(SOCKET_EVENTS.approvalRequested, (payload: Any) => {
+    useApprovalStore.getState().addRequest(payload);
+  });
+
+  // ---- Executions -----------------------------------------------------------
+  on(SOCKET_EVENTS.executionCreated, (payload: Any) =>
+    useExecutionStore.getState().upsertCreated({
+      executionId: s(payload?.executionId),
+      title: s(payload?.title),
+      workspaceId: payload?.workspaceId ?? null,
+      steps: Array.isArray(payload?.steps)
+        ? payload.steps.map((st: Any) => ({
+            id: s(st?.stepId) || s(st?.id),
+            tool: s(st?.tool),
+            status: st?.status,
+          }))
+        : [],
+    }),
+  );
+  on(SOCKET_EVENTS.executionStarted, (payload: Any) =>
+    useExecutionStore.getState().setStarted({
+      executionId: s(payload?.executionId),
+      workspaceId: payload?.workspaceId ?? null,
+    }),
+  );
+  on(SOCKET_EVENTS.executionStepStarted, (payload: Any) =>
+    useExecutionStore.getState().stepStarted({
+      executionId: s(payload?.executionId),
+      stepId: s(payload?.stepId),
+      tool: s(payload?.tool),
+    }),
+  );
+  on(SOCKET_EVENTS.executionStepCompleted, (payload: Any) =>
+    useExecutionStore.getState().stepCompleted({
+      executionId: s(payload?.executionId),
+      stepId: s(payload?.stepId),
+      status: payload?.status ?? 'COMPLETED',
+      result: payload?.result,
+      tool: s(payload?.tool),
+    }),
+  );
+  on(SOCKET_EVENTS.executionStepFailed, (payload: Any) =>
+    useExecutionStore.getState().stepFailed({
+      executionId: s(payload?.executionId),
+      stepId: s(payload?.stepId),
+      error: s(payload?.error),
+    }),
+  );
+  on(SOCKET_EVENTS.executionBlocked, (payload: Any) =>
+    useExecutionStore.getState().setBlocked({
+      executionId: s(payload?.executionId),
+      reason: s(payload?.reason),
+    }),
+  );
+  on(SOCKET_EVENTS.executionCompleted, (payload: Any) =>
+    useExecutionStore.getState().setCompleted({
+      executionId: s(payload?.executionId),
+      status: s(payload?.status) || 'COMPLETED',
+      reason: s(payload?.reason),
+    }),
+  );
+  on(SOCKET_EVENTS.executionFailed, (payload: Any) =>
+    useExecutionStore.getState().setCompleted({
+      executionId: s(payload?.executionId),
+      status: 'FAILED',
+      reason: s(payload?.reason) || s(payload?.error),
+    }),
+  );
+  on(SOCKET_EVENTS.executionReplan, (payload: Any) =>
+    useExecutionStore.getState().replanSuggested({
+      executionId: payload?.executionId ?? null,
+      tool: s(payload?.tool),
+      reason: s(payload?.reason),
+    }),
+  );
+
+  return () => offs.forEach((fn) => fn());
+}

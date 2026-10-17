@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "arc-ai-mobile",
+    "name": "ARC-AI",
     "slug": "arc-ai-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,9 +8,13 @@
     "scheme": "arcaimobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.arcai.mobile",
+      "supportsTablet": true
     },
     "android": {
+      "package": "com.arcai.mobile",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -32,7 +36,28 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      "expo-secure-store",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow ARC-AI to use the microphone for voice mode."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow ARC-AI to use the camera so you can send images to the assistant."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow ARC-AI to access your photos so you can attach images."
+        }
+      ],
+      "expo-web-browser",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,

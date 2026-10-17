@@ -1,56 +1,221 @@
-# Welcome to your Expo app 👋
+# ARC-AI Mobile
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+React Native (Expo) client for **ARC-AI** — the Autonomous Real-time
+Conversational Agent. It talks to the same backend as the ARC-AI web app
+(REST under `/api`, realtime over Socket.IO) and mirrors the web feature set on
+mobile.
 
-## Get started
+## Features
 
-1. Install dependencies
+- **Streaming chat** with the ARC agent, markdown rendering, and message actions
+- **Voice mode** — streaming speech-to-text (server-side) and streamed PCM
+  text-to-speech with barge-in
+- **Vision** — attach photos, documents, or capture from the camera
+- **Conversations** — browse, search, rename, pin and delete history
+- **Workspaces** — create/switch workspaces that scope conversations & memory
+- **Memory** — learned facts, semantic memories, search, and learning toggle
+- **Tools** — connect/disconnect MCP servers and inspect their tools
+- **Automation** — WhatsApp linking (QR / phone pairing), contact sync, sends
+- **Approvals** — decide on agent tool approvals inline with live expiry
+- **Agent executions** — live step-by-step plan progress
+- **9 themes** (dark/light/neon), persisted locally
+- **Auth** — email/password, Google, and guest sessions
 
-   ```bash
-   npm install
-   ```
+## Requirements
 
-2. Start the app
+- Node.js 20+
+- npm 10+
+- An Android device or emulator (for APK builds see below)
+- For local native builds: Java 17 and the Android SDK
+- A reachable ARC-AI backend
 
-   ```bash
-   npx expo start
-   ```
+## Environment variables
 
-In the output, you'll find options to open the app in a
+Expo inlines **only** variables prefixed with `EXPO_PUBLIC_` into the app
+bundle. They are **not secrets** — anyone can read them from the APK.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+There is only **one** variable. REST and Socket.IO both live on the ARC-AI
+backend, so a single origin covers both (`<url>/api` and `<url>/socket.io`).
 
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+| Variable | Required | Description |
+| --- | --- | --- |
+| `EXPO_PUBLIC_API_URL` | Yes | Origin of the ARC-AI backend. No trailing slash and **no** `/api` suffix. |
 
-## Get a fresh project
+> The web app uses two variables (`VITE_API_URL` + `VITE_SOCKET_URL`) only
+> because the browser proxies REST same-origin to dodge third-party-cookie
+> blocking while connecting the WebSocket directly. A native app has neither
+> constraint, so `EXPO_PUBLIC_SOCKET_URL` is intentionally not used.
 
-When you're ready, run:
+Examples of `EXPO_PUBLIC_API_URL`:
 
-```bash
-npm run reset-project
+| Target | Value |
+| --- | --- |
+| Hosted backend | `https://<your-backend-host>` |
+| Android emulator (local server) | `http://10.0.2.2:5000` |
+| iOS simulator (local server) | `http://localhost:5000` |
+| Physical device (local server) | `http://<your-computer-LAN-IP>:5000` |
+
+`src/constants/config.ts` ships with a default host, so the app still runs if
+`EXPO_PUBLIC_API_URL` is unset — set it to point at your own deployment.
+
+### Environment variables for cloud builds
+
+`eas build` runs on Expo's servers and does **not** read your local `.env`.
+Pass the value to the build either inline in `eas.json`:
+
+```jsonc
+// eas.json
+{
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": { "EXPO_PUBLIC_API_URL": "https://<your-backend-host>" }
+    }
+  }
+}
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+or as an EAS environment variable:
 
-### Other setup steps
+```bash
+eas env:create --name EXPO_PUBLIC_API_URL --value https://<your-backend-host> --environment preview --visibility plaintext
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## Getting started
 
-## Learn more
+```bash
+npm install
+cp .env.example .env      # then set EXPO_PUBLIC_API_URL
+npx expo start
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Then press `a` for Android, `i` for iOS, or scan the QR code with
+[Expo Go](https://expo.dev/go). Voice capture and camera require a development
+build (created below); plain text chat works in Expo Go.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Useful scripts:
 
-## Join the community
+| Command | Description |
+| --- | --- |
+| `npm start` | Start the Expo dev server |
+| `npm run android` | Start and open on Android |
+| `npm run ios` | Start and open on iOS |
+| `npm run web` | Start in a web browser |
+| `npm run lint` | Run ESLint (`expo lint`) |
+| `npx tsc --noEmit` | Type-check the project |
 
-Join our community of developers creating universal apps.
+## Backend requirement
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+The mobile client authenticates with a **Bearer token**. Because the browser
+flow only sets an httpOnly cookie, the backend must also return the JWT in the
+response body for `POST /api/auth/login`, `POST /api/auth/register`,
+`POST /api/auth/guest`, and `POST /api/auth/session`. The ARC-AI backend in
+this project already returns `{ ..., token }`; see
+`server/controllers/authController.js`.
+
+## Build an installable Android APK
+
+The app uses native modules, so it must be built as a standalone/development
+binary — not run through Expo Go for the full feature set.
+
+### Option A — EAS Build (recommended, produces a signed APK)
+
+1. Install and sign in to the EAS CLI:
+
+   ```bash
+   npm install -g eas-cli
+   eas login
+   ```
+
+2. Link the project to your Expo account (writes `extra.eas.projectId` into
+   `app.json`):
+
+   ```bash
+   eas init
+   ```
+
+3. Set the backend URL for the build (see
+   [Environment variables for cloud builds](#environment-variables-for-cloud-builds)).
+
+4. Build the APK using the `preview` profile (`android.buildType: "apk"`):
+
+   ```bash
+   eas build --platform android --profile preview
+   ```
+
+   When the build finishes, download the `.apk` from the printed URL or from
+   the Expo dashboard. EAS generates and stores a keystore for you automatically.
+
+### Option B — Local build (no Expo account)
+
+Requires Java 17 and the Android SDK.
+
+```bash
+npx expo prebuild --platform android --clean
+cd android
+./gradlew assembleRelease
+```
+
+The APK is written to
+`android/app/build/outputs/apk/release/app-release.apk`. Note: a locally built
+release APK is signed with the debug keystore unless you configure your own
+release signing. For a properly signed, store-ready artifact prefer EAS.
+
+### Install on your phone
+
+1. Copy the `.apk` to the device (or open the download link on it).
+2. Allow **Install unknown apps** for the app doing the installing
+   (Settings → Apps → Special access → Install unknown apps).
+3. Open the APK and tap **Install**.
+
+## Publish to a GitHub Release
+
+Attach the built APK to a release on this repository.
+
+With the GitHub CLI:
+
+```bash
+gh release create v1.0.0 ./app-release.apk \
+  --title "ARC-AI Mobile v1.0.0" \
+  --notes "First Android release (APK)."
+```
+
+Or in the browser: **Releases → Draft a new release →** tag `v1.0.0`, add the
+`.apk` under **Attach binaries**, and publish. Users can install directly from
+the release asset the same way as in the previous section.
+
+## Project structure
+
+```
+src/
+  app/            Expo Router routes
+    (auth)/       Sign-in / register
+    (app)/        Drawer app: chat, memory, tools, automation, settings, about
+    camera.tsx    Camera capture modal
+    _layout.tsx   Root providers + socket + voice capture
+  api/            REST clients (axios) + token holder
+  auth/           Google OAuth helper
+  chat/           Turn submission + new-chat controller
+  components/     UI kit and chat components
+  lib/            Pure logic (voice machine, approval UI, history, media)
+  socket/         Socket.IO client, event map, handlers, client actions
+  store/          Zustand stores (auth, chat, workspace, execution, …)
+  theme/          Design tokens + 9 themes
+  voice/          STT channel, PCM helpers, TTS player, capture
+  constants/      Runtime config
+```
+
+## Notes & limitations
+
+- **TTS playback.** Expo Audio has no raw-PCM sink, so streamed server audio is
+  wrapped into short WAV segments and played in order. Installing
+  `react-native-audio-api` and using a development build upgrades this to true
+  sample-accurate streaming. `expo-speech` is used as a local fallback.
+- **Voice & camera** need a development or standalone build (not Expo Go).
+- `EXPO_PUBLIC_*` values are embedded in the binary; changing the backend
+  requires a rebuild or a runtime override.
+
+## License
+
+See [LICENSE](./LICENSE).

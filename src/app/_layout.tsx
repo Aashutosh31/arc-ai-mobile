@@ -1,18 +1,49 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { SocketBridge } from '@/socket/SocketBridge';
+import { useAuthStore } from '@/store/authStore';
+import { useTheme } from '@/store/themeStore';
+import { VoiceCapture } from '@/voice/VoiceCapture';
 
-SplashScreen.preventAutoHideAsync();
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function RootLayout() {
+  const theme = useTheme();
+  const status = useAuthStore((s) => s.status);
+  const bootstrap = useAuthStore((s) => s.bootstrap);
+
+  useEffect(() => {
+    void bootstrap();
+  }, [bootstrap]);
+
+  useEffect(() => {
+    if (status !== 'loading') SplashScreen.hideAsync().catch(() => {});
+  }, [status]);
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.background }}>
+      <SafeAreaProvider>
+        <StatusBar style={theme.colorScheme === 'dark' ? 'light' : 'dark'} />
+        <SocketBridge />
+        <VoiceCapture />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: theme.background },
+          }}>
+          <Stack.Screen name="(app)" />
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen
+            name="camera"
+            options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+          />
+        </Stack>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

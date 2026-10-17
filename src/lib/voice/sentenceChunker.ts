@@ -1,0 +1,103 @@
+// Voice Runtime — sentence/phrase chunker (shared pure logic).
+// Ported verbatim from the web client (client/src/utils/sentenceChunker.js).
+//
+// Pipeline: LLM text delta → chunker → TTS request → audio stream → playback.
+
+export const DEFAULT_MAX_CHUNK = 220;
+
+export const cleanTextForVoice = (text: unknown): string => {
+  let cleaned = String(text ?? '');
+  cleaned = cleaned.replace(/```[\s\S]*?```/g, ' ');
+  cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
+  cleaned = cleaned.replace(/\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, '$1');
+  cleaned = cleaned.replace(/https?:\/\/[^\s]+/g, ' ');
+  cleaned = cleaned.replace(
+    /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\p{Emoji_Modifier}]/gu,
+    ' ',
+  );
+  cleaned = cleaned.replace(/[*_#`|~<>^]/g, ' ');
+  cleaned = cleaned.replace(/&/g, ' and ');
+  cleaned = cleaned.replace(/\s{2,}/g, ' ');
+  return cleaned.trim();
+};
+
+export const splitIntoVoiceChunks = (
+  text: unknown,
+  { maxLength = DEFAULT_MAX_CHUNK }: { maxLength?: number } = {},
+): string[] => {
+  const cleaned = cleanTextForVoice(text);
+  if (!cleaned) return [];
+  const sentences = cleaned.split(/(?<=[.!?])\s+(?=[A-Z"“('0-9])/g) || [cleaned];
+  const segments: string[] = [];
+  const pushCapped = (value: string) => {
+    const words = String(value || '').trim().split(/\s+/).filter(Boolean);
+    let buffer = '';
+    for (const word of words) {
+      const candidate = buffer ? `${buffer} ${word}` : word;
+      if (candidate.length > maxLength && buffer) {
+        segments.push(buffer.trim());
+        buffer = word;
+      } else {
+        buffer = candidate;
+      }
+    }
+    if (buffer.trim()) segments.push(buffer.trim());
+  };
+  for (const sentence of sentences) {
+    const trimmed = String(sentence || '').trim();
+    if (!trimmed) continue;
+    if (trimmed.length <= maxLength) {
+      segments.push(trimmed);
+      continue;
+    }
+    const clauses = trimmed.split(/(?<=[,;:])\s+/);
+    for (const clause of clauses) {
+      const clauseText = String(clause || '').trim();
+      if (!clauseText) continue;
+      if (clauseText.length <= maxLength) segments.push(clauseText);
+      else pushCapped(clauseText);
+    }
+  }
+  return segments.filter(Boolean);
+};
+
+// Incremental chunker for live LLM deltas.
+export class SentenceStreamChunker {
+  private buffer = '';
+  private maxLength: number;
+
+  constructor({ maxLength = DEFAULT_MAX_CHUNK }: { maxLength?: number } = {}) {
+    this.maxLength = maxLength;
+  }
+
+  push(delta: string | null | undefined): string[] {
+    if (!delta) return [];
+    this.buffer += String(delta);
+    const out: string[] = [];
+    const sentenceMatch = this.buffer.match(/^([\s\S]*?[.!?])(?=\s+[A-Z"“('0-9]|\s*$)/);
+    if (sentenceMatch && sentenceMatch[1].trim().length >= 8) {
+      out.push(sentenceMatch[1].trim());
+      this.buffer = this.buffer.slice(sentenceMatch[1].length).trim();
+      return out;
+    }
+    if (this.buffer.length >= this.maxLength + 20) {
+      const cut = this.buffer.lastIndexOf(',', this.maxLength + 20);
+      const at = cut > 80 ? cut + 1 : this.maxLength + 20;
+      const piece = this.buffer.slice(0, at).trim();
+      if (piece) out.push(piece);
+      this.buffer = this.buffer.slice(at).trim();
+    }
+    return out;
+  }
+
+  flush(): string[] {
+    const remainder = String(this.buffer || '').trim();
+    this.buffer = '';
+    if (!remainder) return [];
+    return splitIntoVoiceChunks(remainder, { maxLength: this.maxLength });
+  }
+
+  reset() {
+    this.buffer = '';
+  }
+}
