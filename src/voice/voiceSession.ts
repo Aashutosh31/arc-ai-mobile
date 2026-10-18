@@ -212,13 +212,35 @@ export function notifySttError(message: string): void {
   voiceMachine.onError(message);
 }
 
+let ttsEndAwaitingDrain = false;
+
 export function notifyTtsStarted(): void {
+  ttsEndAwaitingDrain = false;
   voiceMachine.onSpeechStarted();
 }
 
+// The server finished SENDING the TTS stream, but the device may still be
+// playing buffered segments. Reopening the mic here would let it transcribe
+// ARC's own voice (an echo loop the user hears as a second voice), so the turn
+// only ends once playback actually drains — see the listener below.
 export function notifyTtsEnded(): void {
-  if (voiceMachine.active) voiceMachine.onSpeechEnded();
+  if (!voiceMachine.active) {
+    ttsEndAwaitingDrain = false;
+    return;
+  }
+  if (ttsPlayer.isSpeaking()) {
+    ttsEndAwaitingDrain = true;
+    return;
+  }
+  voiceMachine.onSpeechEnded();
 }
+
+// Playback drained: safe to resume listening now that ARC is silent.
+ttsPlayer.onSpeakingChange((speaking) => {
+  if (speaking || !ttsEndAwaitingDrain) return;
+  ttsEndAwaitingDrain = false;
+  if (voiceMachine.active) voiceMachine.onSpeechEnded();
+});
 
 /** Resume listening when a text-only response completes in voice mode. */
 export function notifyAssistantDone(): void {

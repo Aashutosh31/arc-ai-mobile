@@ -40,6 +40,11 @@ class TtsPlayer {
     return () => this.listeners.delete(fn);
   }
 
+  /** True while any audio (server PCM or local fallback) is still audible. */
+  isSpeaking(): boolean {
+    return this.playing || this.speechFallbackActive;
+  }
+
   private emitSpeaking(v: boolean) {
     this.listeners.forEach((fn) => {
       try {

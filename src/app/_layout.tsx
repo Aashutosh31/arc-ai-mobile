@@ -42,6 +42,8 @@ export default function RootLayout() {
             }}>
             <Stack.Screen name="(app)" />
             <Stack.Screen name="(auth)" />
+            <Stack.Screen name="auth" />
+            <Stack.Screen name="auth-link" />
             <Stack.Screen
               name="camera"
               options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
