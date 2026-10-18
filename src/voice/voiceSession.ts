@@ -186,12 +186,30 @@ export function notifySttSpeechStart(): void {
   useVoiceStore.getState().setInterim('');
 }
 
-export function notifySttFinal(text: string): void {
-  useVoiceStore.getState().setFinal(text || '');
-  useVoiceStore.getState().setInterim('');
-  if (voiceMachine.active && text) {
-    submitTurn({ text });
+export function notifySttFinal(text: string, sid?: string): void {
+  // Ignore a superseded session's final: it belongs to a turn we already moved on from.
+  if (sid && sessionId && sid !== sessionId) return;
+  const store = useVoiceStore.getState();
+  const transcript = (text || '').trim();
+  store.setFinal(transcript);
+  store.setInterim('');
+  if (!voiceMachine.active) return;
+
+  if (!transcript) {
+    // Nothing recognized: return to a live listening cycle instead of stalling
+    // in `processing` with a dead STT session.
+    if (voiceMachine.state === 'listening') voiceMachine.restartListening('empty transcript');
+    else if (voiceMachine.state === 'processing') voiceMachine.onSpeechEnded();
+    return;
   }
+
+  // If the server finalized on its own (server-side VAD), the machine is still
+  // `listening`; advance it to `processing` so the response-complete path can
+  // resume listening even when the reply carries no server TTS.
+  if (voiceMachine.state === 'listening') {
+    voiceMachine.onUtteranceSubmitted(voiceMachine.turn);
+  }
+  submitTurn({ text: transcript });
 }
 
 export function notifySttEnd(): void {
@@ -201,15 +219,42 @@ export function notifySttEnd(): void {
 export function notifySttCancelled(): void {
   resetSession();
   useVoiceStore.getState().setInterim('');
-  if (voiceMachine.active && voiceMachine.state !== 'listening') {
-    voiceMachine.deactivate('cancelled');
+  // Cancels are routine: they fire when TTS starts (capture stops while ARC
+  // speaks), on barge-in, or when a session is superseded. Deactivating here
+  // used to exit voice mode after the very first reply, so instead just make
+  // sure a live listening cycle still has a session to capture into.
+  if (voiceMachine.active && voiceMachine.state === 'listening') {
+    voiceMachine.restartListening('cancelled; refreshing session');
+  }
+}
+
+export function notifySttSpeechEnd(sid?: string): void {
+  // Ignore a late VAD frame from a superseded session — acting on it would
+  // commit the *new* (empty) listening cycle.
+  if (sid && sessionId && sid !== sessionId) return;
+  // Hands-free commit: the server's VAD heard the speaker stop. Idempotent per
+  // turn via the machine's `listening` guard.
+  if (voiceMachine.active && voiceMachine.state === 'listening') {
+    voiceMachine.onUtteranceSubmitted(voiceMachine.turn);
   }
 }
 
 export function notifySttError(message: string): void {
   useVoiceStore.getState().setError(message || 'Speech recognition failed.');
   resetSession();
+  // Surface the failure, but leave voice mode cleanly off so the next tap
+  // starts a fresh session instead of tapping into a dead `error` state.
   voiceMachine.onError(message);
+  voiceMachine.deactivate('error');
+}
+
+/** Recover after a socket drop: the server closed our STT session with it. */
+export function handleSocketReconnect(): void {
+  resetSession();
+  useVoiceStore.getState().setInterim('');
+  if (voiceMachine.active && voiceMachine.state === 'listening') {
+    voiceMachine.restartListening('socket reconnect');
+  }
 }
 
 let ttsEndAwaitingDrain = false;

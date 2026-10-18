@@ -1,13 +1,16 @@
 import { useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import type { Socket } from 'socket.io-client';
 
+import { loadActiveConversationId, saveActiveConversationId } from '@/lib/activeConversation';
 import { registerSocketHandlers } from '@/socket/registerHandlers';
-import { connectSocket, disconnectSocket } from '@/socket/socketClient';
+import { connectSocket, disconnectSocket, getSocket } from '@/socket/socketClient';
 import { useApprovalStore } from '@/store/approvalStore';
 import { useAuthStore } from '@/store/authStore';
 import { useChatStore } from '@/store/chatStore';
 import { useConversationStore } from '@/store/conversationStore';
 import { useWorkspaceStore } from '@/store/workspaceStore';
+import { handleSocketReconnect } from '@/voice/voiceSession';
 import { ttsPlayer } from '@/voice/ttsPlayer';
 
 /**
@@ -31,17 +34,44 @@ export function SocketBridge() {
 
     let disposed = false;
     let attached: Socket | null = null;
+    let restoring = false;
 
-    const reload = () => {
-      void useWorkspaceStore.getState().load();
-      void useConversationStore.getState().load();
+    // Reopen the thread the user was last viewing. Messages live only in
+    // memory, so without this a cold start dropped the conversation even
+    // though it was stored server-side.
+    const restoreActiveConversation = async () => {
+      const chat = useChatStore.getState();
+      if (restoring || chat.conversationId || chat.messages.length) return;
+      const id = await loadActiveConversationId();
+      if (!id || disposed) return;
+      restoring = true;
+      try {
+        await useConversationStore.getState().open(id);
+      } catch {
+        // Conversation gone / belongs to another workspace: stop retrying.
+        await saveActiveConversationId(null);
+      } finally {
+        restoring = false;
+      }
+    };
+
+    const reload = async () => {
+      // Workspace first: conversation fetches are scoped to the active one.
+      await useWorkspaceStore.getState().load();
+      await useConversationStore.getState().load();
+      await restoreActiveConversation();
     };
     const onConnect = () => {
       useChatStore.getState().setConnection('online', null);
-      reload();
+      // A dropped connection kills the server-side STT session; re-open it so
+      // voice mode keeps working after a reconnect.
+      handleSocketReconnect();
+      void reload();
     };
     const onDisconnect = () => {
       useChatStore.getState().setConnection('offline', 'Disconnected from ARC-AI.');
+      useChatStore.getState().setProcessing(false);
+      handleSocketReconnect();
     };
     const onConnectError = (err: Error) => {
       console.warn('[ARC] socket connect_error:', err?.message || err);
@@ -75,6 +105,17 @@ export function SocketBridge() {
       }
     };
   }, [token, status]);
+
+  // Android suspends sockets in the background; nudge the connection back to
+  // life as soon as the app is foregrounded again.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      const socket = getSocket();
+      if (socket && !socket.connected) socket.connect();
+    });
+    return () => sub.remove();
+  }, []);
 
   // Reset per-session state on sign-out.
   useEffect(() => {

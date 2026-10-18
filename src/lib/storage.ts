@@ -68,4 +68,5 @@ export const STORAGE_KEYS = {
   token: 'arc.auth.token',
   identity: 'arc.auth.identity',
   voiceSettings: 'arc.voice.settings.v2',
+  activeConversation: 'arc.chat.activeConversation',
 } as const;

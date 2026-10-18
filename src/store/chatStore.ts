@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import { saveActiveConversationId } from '@/lib/activeConversation';
 import { sanitizeHistoryText } from '@/lib/conversationHistory';
 
 export interface UiMessage {
@@ -65,7 +66,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setConnection: (connection, error = null) => set({ connection, connectionError: error }),
 
-  setConversationId: (id) => set({ conversationId: id }),
+  setConversationId: (id) =>
+    set((s) => {
+      // Persist only on change: this is called for every streamed chunk, and
+      // the durable id is what lets a cold start reopen the same thread.
+      if (s.conversationId !== id) void saveActiveConversationId(id);
+      return { conversationId: id };
+    }),
 
   setMessages: (messages) => set({ messages }),
 
@@ -170,7 +177,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       agentStatus: null,
     })),
 
-  reset: () =>
+  reset: () => {
+    void saveActiveConversationId(null);
     set({
       conversationId: null,
       messages: [],
@@ -180,5 +188,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       agentStatus: null,
       providerInfo: null,
       media: null,
-    }),
+    });
+  },
 }));

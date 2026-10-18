@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { submitTurn, stopGeneration } from '@/chat/chatController';
 import { AttachMenu, type AttachMenuEntry } from '@/components/AttachMenu';
+import { useKeyboardHeight } from '@/lib/useKeyboardHeight';
 import { useChatStore } from '@/store/chatStore';
 import { useComposerStore } from '@/store/composerStore';
 import { useTheme } from '@/store/themeStore';
@@ -36,9 +37,11 @@ export function ChatInput() {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
   const isProcessing = useChatStore((s) => s.isProcessing);
   const voiceActive = useVoiceStore((s) => s.active);
   const voiceMode = useVoiceStore((s) => s.mode);
+  const voiceError = useVoiceStore((s) => s.error);
   const interim = useVoiceStore((s) => s.interim);
   const pendingImage = useComposerStore((s) => s.pendingImage);
   const pendingDocument = useComposerStore((s) => s.pendingDocument);
@@ -177,7 +180,12 @@ export function ChatInput() {
         {
           backgroundColor: theme.background,
           borderTopColor: theme.border,
-          paddingBottom: Math.max(insets.bottom, Spacing.sm) + Spacing.xs,
+          // When the keyboard is up it covers the safe-area inset, so pad by
+          // its height instead of double-counting the home indicator.
+          paddingBottom:
+            keyboardHeight > 0
+              ? keyboardHeight + Spacing.xs
+              : Math.max(insets.bottom, Spacing.sm) + Spacing.xs,
         },
       ]}>
       {pendingImage || pendingDocument ? (
@@ -213,6 +221,22 @@ export function ChatInput() {
           <ThemedText variant="muted" numberOfLines={2} style={{ flex: 1 }}>
             {interim || (voiceMode === 'processing' ? 'Thinking…' : 'Listening…')}
           </ThemedText>
+        </View>
+      ) : null}
+
+      {!voiceActive && voiceError ? (
+        <View
+          style={[
+            styles.voiceBar,
+            { borderColor: theme.destructive, backgroundColor: theme.destructive + '18' },
+          ]}>
+          <Ionicons name="alert-circle" size={16} color={theme.destructive} />
+          <ThemedText variant="muted" numberOfLines={2} style={{ flex: 1 }}>
+            {voiceError}
+          </ThemedText>
+          <Pressable hitSlop={8} onPress={() => useVoiceStore.getState().setError(null)}>
+            <Ionicons name="close" size={16} color={theme.destructive} />
+          </Pressable>
         </View>
       ) : null}
 

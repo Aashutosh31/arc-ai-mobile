@@ -3,8 +3,6 @@ import { useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  KeyboardAvoidingView,
-  Platform,
   StyleSheet,
   View,
 } from 'react-native';
@@ -17,6 +15,7 @@ import { ConnectionBanner } from '@/components/ConnectionBanner';
 import { ExecutionPanel } from '@/components/ExecutionPanel';
 import { MediaCard } from '@/components/MediaCard';
 import { ThemedText } from '@/components/ui';
+import { useKeyboardHeight } from '@/lib/useKeyboardHeight';
 import { useChatStore, type UiMessage } from '@/store/chatStore';
 import { useConversationStore } from '@/store/conversationStore';
 import { useTheme } from '@/store/themeStore';
@@ -27,6 +26,7 @@ export default function ChatScreen() {
   const messages = useChatStore((s) => s.messages);
   const hasMore = useConversationStore((s) => s.hasMore);
   const loadingMore = useConversationStore((s) => s.loadingMore);
+  const keyboardHeight = useKeyboardHeight();
   const listRef = useRef<FlatList<UiMessage>>(null);
   const lastIdRef = useRef<string | null>(null);
   const prependingRef = useRef(false);
@@ -47,6 +47,11 @@ export default function ChatScreen() {
     }
   }, [messages]);
 
+  // The composer lifts above the keyboard; keep the latest message in view.
+  useEffect(() => {
+    if (keyboardHeight > 0) scrollToEnd();
+  }, [keyboardHeight]);
+
   const loadOlder = () => {
     if (!hasMore || loadingMore || prependingRef.current) return;
     prependingRef.current = true;
@@ -65,10 +70,7 @@ export default function ChatScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: theme.background }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       <ConnectionBanner />
 
       <FlatList
@@ -122,7 +124,7 @@ export default function ChatScreen() {
       />
 
       <ChatInput />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
