@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# Local planning & debugging workspace (never ship this)
+/planning/
+
 # Expo / Metro
 .expo/
 dist/
