@@ -49,9 +49,11 @@ export async function connectSocket(opts: ConnectOptions = {}): Promise<Socket> 
 
   socket = io(SOCKET_URL, {
     path: SOCKET_PATH,
-    // Rely on socket.io's default transport order (polling first, then upgrade
-    // to websocket). Polling is the most network-compatible handshake and
-    // survives cold starts / proxies that throttle the WS upgrade.
+    // Prefer a direct websocket (matching the web client) so the long-lived
+    // voice/audio session does not sit on HTTP long-polling, which is far more
+    // prone to drops on mobile networks. Socket.IO still falls back to polling
+    // automatically when a websocket upgrade is not possible.
+    transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
