@@ -51,9 +51,13 @@ export async function connectSocket(opts: ConnectOptions = {}): Promise<Socket> 
     path: SOCKET_PATH,
     // Prefer a direct websocket (matching the web client) so the long-lived
     // voice/audio session does not sit on HTTP long-polling, which is far more
-    // prone to drops on mobile networks. Socket.IO still falls back to polling
-    // automatically when a websocket upgrade is not possible.
+    // prone to drops on mobile networks. Every engine.io attempt starts with
+    // `transports[0]`, and without `tryAllTransports` a failed websocket never
+    // retries the next transport (engine.io `_onError` shifts the list only
+    // when this flag is on) — that stuck mobile clients on "websocket error"
+    // behind carriers/proxies that block the upgrade.
     transports: ['websocket', 'polling'],
+    tryAllTransports: true,
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,

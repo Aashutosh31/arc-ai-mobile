@@ -14,6 +14,19 @@ import { Spacing } from '@/theme/layout';
  * state. Hidden while online; otherwise shows a spinner (connecting) or the
  * failure reason, plus the host being contacted and a tap-to-retry action.
  */
+
+// Raw engine.io error strings ("websocket error", "xhr poll error", …) are
+// meaningless to users — surface what the failure means for the session instead.
+const ERROR_LABELS: Record<string, string> = {
+  'websocket error': "Can't reach ARC-AI. Trying another connection…",
+  'xhr poll error': "Can't reach ARC-AI.",
+};
+
+function friendlyError(message?: string | null): string {
+  const raw = (message || '').trim();
+  if (!raw) return 'Offline.';
+  return ERROR_LABELS[raw.toLowerCase()] ?? raw;
+}
 export function ConnectionBanner() {
   const theme = useTheme();
   const connection = useChatStore((s) => s.connection);
@@ -60,7 +73,7 @@ export function ConnectionBanner() {
       )}
       <View style={{ flex: 1 }}>
         <ThemedText variant="caption" color={tint} numberOfLines={2}>
-          {connecting ? 'Connecting to ARC-AI…' : `${error || 'Offline.'} Tap to retry.`}
+          {connecting ? 'Connecting to ARC-AI…' : `${friendlyError(error)} Tap to retry.`}
         </ThemedText>
         <ThemedText variant="caption" numberOfLines={1}>
           {SOCKET_URL}
