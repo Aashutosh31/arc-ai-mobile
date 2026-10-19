@@ -12,6 +12,7 @@ export const SOCKET_EVENTS = {
   creditsUpdate: 'ai:credits:update',
   conversationCreated: 'ai:conversation:created',
   conversationTitle: 'ai:conversation:title',
+  messageAppended: 'conversation.message.appended',
   clientAction: 'ai:client:action',
   botError: 'bot_error',
 

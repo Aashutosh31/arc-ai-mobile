@@ -84,6 +84,27 @@ export function registerSocketHandlers(socket: Socket): () => void {
     }
   });
 
+  // Realtime sync Phase A ([planning 05]): one durable message broadcast for
+  // every device of this user. Only the OPEN thread is folded in (dedupe /
+  // replace by the record's `_id` in chatStore.mergeServerMessage); non-open
+  // records are ignored — the conversation list refetches on created/title.
+  on(SOCKET_EVENTS.messageAppended, (payload: Any) => {
+    const convId = s(payload?.conversationId);
+    const message = payload?.message;
+    if (!convId || !message || !s(message?._id)) return;
+    if (convId === useChatStore.getState().conversationId) {
+      useChatStore.getState().mergeServerMessage({
+        _id: s(message._id),
+        role: s(message.role),
+        content: typeof message.content === 'string' ? message.content : '',
+        attachments: Array.isArray(message.attachments) ? message.attachments : [],
+        streaming: Boolean(message.streaming),
+        interrupted: Boolean(message.interrupted),
+        createdAt: typeof message.createdAt === 'string' ? message.createdAt : undefined,
+      });
+    }
+  });
+
   on(SOCKET_EVENTS.clientAction, (payload: Any) => {
     const action: ClientAction | undefined = payload?.action ?? payload;
     if (action) void applyClientAction(action);

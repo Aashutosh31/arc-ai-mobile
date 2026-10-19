@@ -1,8 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { DrawerContentComponentProps } from 'expo-router/drawer';
 import { useRouter } from 'expo-router';
-import { useMemo } from 'react';
-import { Alert, FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import {
+  Alert,
+  FlatList,
+  Modal,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/ui';
@@ -39,6 +47,11 @@ export function ConversationDrawer(props: DrawerContentComponentProps) {
   const activeWorkspace = useWorkspaceStore((s) => s.active);
   const clearExecutions = useExecutionStore((s) => s.reset);
 
+  // Bug B-07: `Alert.prompt` is iOS-only, which made Android rename a no-op.
+  // A small cross-platform sheet (Modal + TextInput) gives every platform a
+  // real rename dialog.
+  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
+
   const activeRoute = props.state.routeNames[props.state.index];
   const activeConversationId = useChatStore((s) => s.conversationId);
 
@@ -69,22 +82,25 @@ export function ConversationDrawer(props: DrawerContentComponentProps) {
   };
 
   const longPress = (id: string) => {
+    const current = conversations.find((c) => c._id === id);
     const items: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' }[] = [
       {
         text: 'Rename',
         onPress: () => {
-          if (Platform.OS === 'ios' && Alert.prompt) {
-            Alert.prompt('Rename conversation', undefined, (value) => {
-              if (value?.trim()) void rename(id, value.trim());
-            });
-          }
+          setRenaming({ id, title: current?.title || '' });
         },
       },
-      { text: 'Pin / Unpin', onPress: () => void setPinned(id, !conversations.find((c) => c._id === id)?.pinned) },
+      { text: 'Pin / Unpin', onPress: () => void setPinned(id, !current?.pinned) },
       { text: 'Delete', style: 'destructive', onPress: () => void archive(id) },
       { text: 'Cancel', style: 'cancel' },
     ];
     Alert.alert('Conversation', undefined, items);
+  };
+
+  const submitRename = () => {
+    const nextTitle = renaming?.title.trim();
+    if (renaming && nextTitle) void rename(renaming.id, nextTitle);
+    setRenaming(null);
   };
 
   return (
@@ -209,6 +225,53 @@ export function ConversationDrawer(props: DrawerContentComponentProps) {
           </ThemedText>
         </Pressable>
       </View>
+
+      {renaming ? (
+        <Modal transparent animationType="fade" onRequestClose={() => setRenaming(null)}>
+          <View style={[styles.sheetOverlay, { backgroundColor: '#00000066' }]}>
+            <Pressable style={{ flex: 1 }} onPress={() => setRenaming(null)} />
+            <View style={[styles.sheet, { backgroundColor: theme.surface }]}>
+              <ThemedText variant="subtitle">Rename conversation</ThemedText>
+              <TextInput
+                value={renaming.title}
+                onChangeText={(text) => setRenaming({ ...renaming, title: text })}
+                placeholder="Conversation title"
+                autoFocus
+                selectTextOnFocus
+                onSubmitEditing={submitRename}
+                returnKeyType="done"
+                style={[
+                  styles.sheetInput,
+                  { color: theme.foreground, borderColor: theme.border },
+                ]}
+              />
+              <View style={styles.sheetActions}>
+                <Pressable
+                  onPress={() => setRenaming(null)}
+                  style={({ pressed }) => [
+                    styles.sheetButton,
+                    { opacity: pressed ? 0.6 : 1 },
+                  ]}>
+                  <ThemedText variant="muted" color={theme.foregroundMuted}>
+                    Cancel
+                  </ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={submitRename}
+                  style={({ pressed }) => [
+                    styles.sheetButton,
+                    styles.sheetPrimary,
+                    { backgroundColor: theme.primary, opacity: pressed ? 0.8 : 1 },
+                  ]}>
+                  <ThemedText variant="muted" color={theme.primaryForeground}>
+                    Save
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -251,4 +314,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
   },
+  sheetOverlay: { flex: 1, justifyContent: 'flex-end' },
+  sheet: {
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  sheetInput: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    fontSize: 15,
+  },
+  sheetActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: Spacing.sm },
+  sheetButton: {
+    borderRadius: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+  },
+  sheetPrimary: { alignItems: 'center', justifyContent: 'center' },
 });

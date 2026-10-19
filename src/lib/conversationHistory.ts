@@ -40,6 +40,33 @@ export const sanitizeHistoryText = (text: unknown): unknown => {
   return t.trim();
 };
 
+/**
+ * Bug B-06 (mirrors the web client): the server persists documents as
+ * `{ type: 'document', name }` and images as `{ type: 'image', url }` (a
+ * data URL), so durable records can redraw their attachments after reload
+ * or on another device. Returns the renderer fields image/documentName.
+ */
+export function deriveAttachmentFields(
+  attachments: unknown,
+): { image?: string; documentName?: string } {
+  if (!Array.isArray(attachments)) return {};
+  const image = attachments.find(
+    (a): a is { url?: string; base64?: string } =>
+      Boolean(a) && typeof a === 'object' && (a as any).type === 'image' &&
+      ((a as any).url || (a as any).base64),
+  );
+  const document = attachments.find(
+    (a): a is { name?: string } =>
+      Boolean(a) && typeof a === 'object' && (a as any).type === 'document' &&
+      Boolean((a as any).name),
+  );
+  const imageUri = image?.url || image?.base64;
+  return {
+    ...(imageUri ? { image: String(imageUri) } : {}),
+    ...(document?.name ? { documentName: String(document.name) } : {}),
+  };
+}
+
 export function normalizeHistoryMessage(raw: unknown): UiHistoryMessage | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as RawMessage;

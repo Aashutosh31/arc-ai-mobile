@@ -1,7 +1,18 @@
 import { create } from 'zustand';
 
 import { saveActiveConversationId } from '@/lib/activeConversation';
-import { sanitizeHistoryText } from '@/lib/conversationHistory';
+import { deriveAttachmentFields, sanitizeHistoryText } from '@/lib/conversationHistory';
+
+/** Durable `conversation.message.appended` record (sync Phase A payload). */
+export interface ServerAppendedMessage {
+  _id: string;
+  role?: string;
+  content?: string;
+  attachments?: unknown[];
+  streaming?: boolean;
+  interrupted?: boolean;
+  createdAt?: string;
+}
 
 export interface UiMessage {
   id: string | null;
@@ -53,6 +64,14 @@ interface ChatState {
    * guest turns and timeouts where no durable id will ever exist.
    */
   confirmUserMessage: (id: string, serverId: string | null) => void;
+  /**
+   * Fold one durable `conversation.message.appended` record into the live
+   * transcript (sync Phase B). Reconciles by the canonical server `_id`:
+   * known (`serverId`-stamped or fan-out-seen) ids replace in place — a
+   * streaming draft converging to final — unknown ids append. Optimistic
+   * bubbles without a receipt-stamp stay below untouched.
+   */
+  mergeServerMessage: (message: ServerAppendedMessage | null) => void;
   beginAssistantMessage: () => void;
   appendChunk: (delta: string) => void;
   finishAssistantStream: (opts?: { interrupted?: boolean }) => void;
@@ -119,6 +138,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
         m.id === id ? { ...m, pending: false, serverId: serverId ?? m.serverId } : m,
       ),
     })),
+
+  mergeServerMessage: (message) => {
+    if (!message?._id || typeof message._id !== 'string') return;
+    const sid = message._id;
+    const media = deriveAttachmentFields(message.attachments);
+    const next: UiMessage = {
+      id: sid,
+      sender: message.role === 'user' ? 'user' : 'ai',
+      text: (sanitizeHistoryText(message.content ?? '') as string) ?? '',
+      isStreaming: Boolean(message.streaming) && message.role !== 'user',
+      interrupted: Boolean(message.interrupted),
+      ...media,
+      createdAt: message.createdAt ? new Date(message.createdAt).getTime() : undefined,
+    };
+    set((s) => {
+      const idx = s.messages.findIndex(
+        (m) => m.serverId === sid || m.id === sid,
+      );
+      if (idx !== -1) {
+        const messages = [...s.messages];
+        // Preserve optimistic-only fields (image/doc for pre-ack bubbles) —
+        // the server record is authoritative for content/ids.
+        messages[idx] = { ...messages[idx], ...next, id: messages[idx].id === sid ? sid : messages[idx].id };
+        return { messages };
+      }
+      return { messages: [...s.messages, next] };
+    });
+  },
 
   beginAssistantMessage: () =>
     set((s) => ({

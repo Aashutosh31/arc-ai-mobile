@@ -60,6 +60,10 @@ export function SocketBridge() {
       await useWorkspaceStore.getState().load();
       await useConversationStore.getState().load();
       await restoreActiveConversation();
+      // Sync Phase B: on a live reconnect, re-sync the OPEN thread from
+      // durable server history so anything this device missed while offline
+      // reconciles (dedupe is by server `_id`).
+      await useConversationStore.getState().refreshCurrent();
     };
     const onConnect = () => {
       useChatStore.getState().setConnection('online', null);

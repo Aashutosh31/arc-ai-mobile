@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 import { conversationsApi } from '@/api/conversations';
-import { sanitizeHistoryText } from '@/lib/conversationHistory';
+import { deriveAttachmentFields, sanitizeHistoryText } from '@/lib/conversationHistory';
 import { useChatStore, type UiMessage } from '@/store/chatStore';
 import { useWorkspaceStore } from '@/store/workspaceStore';
 import type { ChatMessage, Conversation } from '@/types/api';
@@ -14,8 +14,9 @@ export function mapChatMessagesToUi(messages: ChatMessage[]): UiMessage[] {
       id: m._id,
       sender: m.role === 'ai' ? 'ai' : 'user',
       text: (sanitizeHistoryText(m.content) as string) ?? '',
-      isStreaming: false,
+      isStreaming: Boolean((m as any).streaming ?? false),
       interrupted: false,
+      ...deriveAttachmentFields(m.attachments),
       createdAt: new Date(m.createdAt).getTime(),
     }));
 }
@@ -30,6 +31,8 @@ interface ConversationState {
 
   load: () => Promise<void>;
   open: (conversationId: string) => Promise<void>;
+  /** Re-sync the OPEN thread with server history (reconnect/focus catch-up). */
+  refreshCurrent: () => Promise<void>;
   startNew: () => void;
   create: (title?: string) => Promise<Conversation | null>;
   rename: (conversationId: string, title: string) => Promise<void>;
@@ -72,6 +75,31 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       hasMore: page.page?.hasMore ?? page.hasMore ?? false,
       nextBefore: page.page?.nextBefore ?? null,
     });
+  },
+
+  // Reconnect / foreground catch-up (sync Phase B): the server transcript is
+  // canonical, so a live refetch reconciles any messages this device missed
+  // while offline. Skipped while a stream is drawing (its live bubble is
+  // fresher than a fetch would be) and when no thread is open.
+  refreshCurrent: async () => {
+    const chat = useChatStore.getState();
+    if (!chat.conversationId || chat.isStreaming) return;
+    try {
+      const workspaceId = useWorkspaceStore.getState().active?._id ?? null;
+      const page = await conversationsApi.messages(chat.conversationId, {
+        limit: 30,
+        workspaceId,
+      });
+      if (useChatStore.getState().conversationId === chat.conversationId) {
+        chat.setMessages(mapChatMessagesToUi(page.messages));
+      }
+      set({
+        hasMore: page.page?.hasMore ?? page.hasMore ?? false,
+        nextBefore: page.page?.nextBefore ?? null,
+      });
+    } catch {
+      // Catch-up is best-effort; the next reconnect retries.
+    }
   },
 
   startNew: () => {
@@ -127,13 +155,35 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   loadMore: async () => {
     const { nextBefore, hasMore, loadingMore } = get();
     const conversationId = useChatStore.getState().conversationId;
-    if (!conversationId || !hasMore || !nextBefore || loadingMore) return;
+    if (!conversationId || !hasMore || loadingMore) return;
+
+    // Bug B-12: a page could report hasMore without a nextBefore cursor and
+    // stall loading forever. Fall back to the CHAT VIEW's oldest known
+    // SERVER id — an equivalent server-side cursor (`before=`) — instead of a
+    // dead end. Ack-stamped optimistic bubbles expose it as `serverId`;
+    // history-loaded bubbles already carry it as `id` (never `local_*`).
+    let cursor = nextBefore;
+    if (!cursor) {
+      const messages = useChatStore.getState().messages;
+      for (const m of messages) {
+        if (m.serverId) {
+          cursor = m.serverId;
+          break;
+        }
+        if (typeof m.id === 'string' && m.id && !m.id.startsWith('local_')) {
+          cursor = m.id;
+          break;
+        }
+      }
+    }
+    if (!cursor) return;
+
     set({ loadingMore: true });
     try {
       const workspaceId = useWorkspaceStore.getState().active?._id ?? null;
       const page = await conversationsApi.messages(conversationId, {
         limit: 30,
-        before: nextBefore,
+        before: cursor,
         workspaceId,
       });
       const older = mapChatMessagesToUi(page.messages);

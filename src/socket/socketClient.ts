@@ -82,13 +82,19 @@ export function disconnectSocket(): void {
   }
 }
 
-/** Emit with an optional ack; safe when disconnected. */
+/**
+ * Emit with an optional ack. Bug B-16 fix: emits that happen while the
+ * socket is down are no longer silently swallowed — disconnected emits
+ * return `false` so callers can roll back or queue; acknowledgement-bearing
+ * callers get the ack delivered exactly once. Data loss stays visible.
+ */
 export function emitEvent(
   event: string,
   payload?: unknown,
   ack?: (...args: unknown[]) => void,
-): void {
-  if (!socket || !socket.connected) return;
+): boolean {
+  if (!socket || !socket.connected) return false;
   if (ack) socket.emit(event, payload ?? {}, ack);
   else socket.emit(event, payload ?? {});
+  return true;
 }

@@ -29,6 +29,8 @@ export function submitTurn(input: SubmitTurnInput): void {
   if (!text && !input.image && !input.document) return;
   const chat = useChatStore.getState();
 
+  lastTurnInput = { ...input, text };
+
   // The bubble id doubles as the turn correlation label: the server echoes it
   // in the receipt, which lets this exact bubble be bound to the durable
   // document later (device-sync layer).
@@ -92,6 +94,12 @@ function emitTurn(input: SubmitTurnInput, localId?: string): void {
   });
 }
 
+/** The last turn's full payload (bug B-11): regenerate must re-send the
+ * document and language it originally carried, not only text/image. The
+ * bubble alone never has the document bytes — they were consumed by the
+ * previous emission. Module-lifetime is intended (per regeneration session). */
+let lastTurnInput: SubmitTurnInput | null = null;
+
 /**
  * Re-run the last user turn. Drops any trailing assistant reply, then re-emits
  * the most recent user message so the model regenerates its answer.
@@ -113,9 +121,13 @@ export function regenerateLast(): void {
   // Keep everything up to and including the last user message; drop the reply.
   chat.setMessages(messages.slice(0, lastUserIdx + 1));
 
+  // Carry through the original payload (bug B-11): document + language travel
+  // alongside text/image so the regenerated answer sees the exact same input.
   emitTurn({
-    text: userMsg.text,
-    image: userMsg.image ?? null,
+    text: lastTurnInput?.text ?? userMsg.text,
+    image: lastTurnInput?.image ?? userMsg.image ?? null,
+    document: lastTurnInput?.document ?? null,
+    language: lastTurnInput?.language ?? null,
   });
 }
 
