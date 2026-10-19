@@ -163,4 +163,23 @@ export interface TurnPayload {
   conversationId: string | null;
   workspaceId: string | null;
   language: string | null;
+  /**
+   * Client correlation label echoed verbatim in the submit ack. Never stored
+   * and never interpreted by the server; the receipt rides on it so the
+   * optimistic bubble can be bound to the durable server document even if
+   * turns overlap (preemption re-submits).
+   */
+  clientTurnId?: string;
+}
+
+/** Receipt for an emitted turn (`ai:stt:final` ack). Old servers send none. */
+export interface TurnAck {
+  accepted?: boolean;
+  /** Conversation the turn landed in (null for guests). */
+  conversationId?: string | null;
+  /** Persisted id of the user Message document (null when not durable). */
+  userMessageId?: string | null;
+  error?: string;
+  code?: string | null;
+  clientTurnId?: string | null;
 }

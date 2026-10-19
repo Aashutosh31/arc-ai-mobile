@@ -1,8 +1,15 @@
 import { SOCKET_EVENTS } from '@/socket/events';
 import { emitEvent, getSocket } from '@/socket/socketClient';
-import { useChatStore } from '@/store/chatStore';
+import { createMessageId, useChatStore } from '@/store/chatStore';
 import { useWorkspaceStore } from '@/store/workspaceStore';
-import type { TurnPayload } from '@/types/api';
+import type { TurnAck, TurnPayload } from '@/types/api';
+
+/**
+ * Receipts cut off after this (old server without ack support, dead socket,
+ * dropped ack). A late ack after the timeout is still honored — confirm() only
+ * fills serverId at that point, so nothing tears.
+ */
+const TURN_ACK_TIMEOUT_MS = 10000;
 
 export interface SubmitTurnInput {
   text: string;
@@ -22,15 +29,21 @@ export function submitTurn(input: SubmitTurnInput): void {
   if (!text && !input.image && !input.document) return;
   const chat = useChatStore.getState();
 
+  // The bubble id doubles as the turn correlation label: the server echoes it
+  // in the receipt, which lets this exact bubble be bound to the durable
+  // document later (device-sync layer).
+  const localId = createMessageId();
   chat.addUserMessage(text, {
     image: input.image ?? undefined,
     documentName: input.document?.name,
+    id: localId,
+    pending: true,
   });
-  emitTurn(input);
+  emitTurn(input, localId);
 }
 
 /** Emit a turn without pushing a new user bubble (used by regenerate). */
-function emitTurn(input: SubmitTurnInput): void {
+function emitTurn(input: SubmitTurnInput, localId?: string): void {
   const text = String(input.text || '').trim();
   if (!text && !input.image && !input.document) return;
   const chat = useChatStore.getState();
@@ -42,6 +55,9 @@ function emitTurn(input: SubmitTurnInput): void {
         : 'Not signed in to ARC-AI. Please sign in and try again.',
     );
     socket?.connect();
+    if (localId != null) {
+      useChatStore.getState().confirmUserMessage(localId, null);
+    }
     return;
   }
 
@@ -56,9 +72,24 @@ function emitTurn(input: SubmitTurnInput): void {
       input.conversationId !== undefined ? input.conversationId : chat.conversationId,
     workspaceId: useWorkspaceStore.getState().active?._id ?? null,
     language: input.language ?? null,
+    clientTurnId: localId,
   };
 
-  socket.emit(SOCKET_EVENTS.turnSubmit, payload);
+  const ackTimer =
+    localId != null
+      ? setTimeout(() => {
+          useChatStore.getState().confirmUserMessage(localId, null);
+        }, TURN_ACK_TIMEOUT_MS)
+      : null;
+
+  socket.emit(SOCKET_EVENTS.turnSubmit, payload, (ack: TurnAck) => {
+    if (ackTimer) clearTimeout(ackTimer);
+    const confirmed = useChatStore.getState();
+    if (ack?.conversationId) confirmed.setConversationId(String(ack.conversationId));
+    if (localId != null) {
+      confirmed.confirmUserMessage(localId, ack?.userMessageId ?? null);
+    }
+  });
 }
 
 /**

@@ -12,6 +12,13 @@ export interface UiMessage {
   image?: string;
   documentName?: string;
   createdAt?: number;
+  /**
+   * True while the turn receipt (`ai:stt:final` ack) is outstanding. Pure
+   * bookkeeping for the device-sync layer — no UI renders it yet.
+   */
+  pending?: boolean;
+  /** Durable server message id, filled when the turn receipt arrives. */
+  serverId?: string;
 }
 
 export interface MediaState {
@@ -36,7 +43,16 @@ interface ChatState {
   setConnection: (connection: ConnectionState, error?: string | null) => void;
   setConversationId: (id: string | null) => void;
   setMessages: (messages: UiMessage[]) => void;
-  addUserMessage: (text: string, opts?: { image?: string; documentName?: string }) => void;
+  addUserMessage: (
+    text: string,
+    opts?: { image?: string; documentName?: string; id?: string; pending?: boolean },
+  ) => void;
+  /**
+   * Bind an optimistic user bubble to its durable server document (turn
+   * receipt). `serverId: null` just resolves the pending state — used for
+   * guest turns and timeouts where no durable id will ever exist.
+   */
+  confirmUserMessage: (id: string, serverId: string | null) => void;
   beginAssistantMessage: () => void;
   appendChunk: (delta: string) => void;
   finishAssistantStream: (opts?: { interrupted?: boolean }) => void;
@@ -51,6 +67,9 @@ interface ChatState {
 
 let localIdSeq = 0;
 const nextLocalId = () => `local_${Date.now().toString(36)}_${(localIdSeq += 1)}`;
+
+/** Mint an optimistic ui id the turn ack can later be correlated against. */
+export const createMessageId = (): string => nextLocalId();
 
 export const useChatStore = create<ChatState>((set, get) => ({
   conversationId: null,
@@ -81,16 +100,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: [
         ...s.messages,
         {
-          id: nextLocalId(),
+          id: opts?.id ?? nextLocalId(),
           sender: 'user',
           text: sanitizeHistoryText(text) as string,
           isStreaming: false,
           interrupted: false,
+          pending: opts?.pending ?? false,
           image: opts?.image,
           documentName: opts?.documentName,
           createdAt: Date.now(),
         },
       ],
+    })),
+
+  confirmUserMessage: (id, serverId) =>
+    set((s) => ({
+      messages: s.messages.map((m) =>
+        m.id === id ? { ...m, pending: false, serverId: serverId ?? m.serverId } : m,
+      ),
     })),
 
   beginAssistantMessage: () =>
