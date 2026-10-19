@@ -228,16 +228,15 @@ src/
   socket/         Socket.IO client, event map, handlers, client actions
   store/          Zustand stores (auth, chat, workspace, execution, …)
   theme/          Design tokens + 9 themes
-  voice/          STT channel, PCM helpers, TTS player, capture
+  voice/          STT channel, PCM helpers, capture
   constants/      Runtime config
 ```
 
 ## Notes & limitations
 
-- **TTS playback.** Expo Audio has no raw-PCM sink, so streamed server audio is
-  wrapped into short WAV segments and played in order. Installing
-  `react-native-audio-api` and using a development build upgrades this to true
-  sample-accurate streaming. `expo-speech` is used as a local fallback.
+- **Voice is input-only.** ARC does not speak replies aloud. Microphone capture
+  and server-side transcription (STT) are unchanged; spoken output was removed
+  along with the mobile TTS player.
 - **Voice & camera** need a development or standalone build (not Expo Go).
 - `EXPO_PUBLIC_*` values are embedded in the binary; changing the backend
   requires a rebuild or a runtime override.

@@ -7,7 +7,6 @@ import { emitEvent } from '@/socket/socketClient';
 import { useDiagnosticsStore } from '@/store/diagnosticsStore';
 import { useVoiceStore } from '@/store/voiceStore';
 import { resamplePcm16 } from '@/voice/pcm';
-import { ttsPlayer } from '@/voice/ttsPlayer';
 import { stopGeneration, submitTurn } from '@/chat/chatController';
 
 const MAX_FRAMES = 1200;
@@ -88,7 +87,6 @@ export const voiceMachine = new VoiceInteractionMachine({
     stopCapture: (reason) => finishCapture(reason),
     interruptGeneration: () => {
       stopGeneration();
-      void ttsPlayer.cancel();
     },
   },
 });
@@ -257,37 +255,13 @@ export function handleSocketReconnect(): void {
   }
 }
 
-let ttsEndAwaitingDrain = false;
+// ARC does not speak: text-to-speech OUTPUT was removed on 2026-10-19
+// (product decision — ARC must not dictate replies aloud on web or mobile).
+// Microphone/STT input is unaffected. A voice turn now always ends on the
+// assistant's final TEXT event via `notifyAssistantDone` below, which is the
+// only completion signal left (there is no TTS playback to drain first).
 
-export function notifyTtsStarted(): void {
-  ttsEndAwaitingDrain = false;
-  voiceMachine.onSpeechStarted();
-}
-
-// The server finished SENDING the TTS stream, but the device may still be
-// playing buffered segments. Reopening the mic here would let it transcribe
-// ARC's own voice (an echo loop the user hears as a second voice), so the turn
-// only ends once playback actually drains — see the listener below.
-export function notifyTtsEnded(): void {
-  if (!voiceMachine.active) {
-    ttsEndAwaitingDrain = false;
-    return;
-  }
-  if (ttsPlayer.isSpeaking()) {
-    ttsEndAwaitingDrain = true;
-    return;
-  }
-  voiceMachine.onSpeechEnded();
-}
-
-// Playback drained: safe to resume listening now that ARC is silent.
-ttsPlayer.onSpeakingChange((speaking) => {
-  if (speaking || !ttsEndAwaitingDrain) return;
-  ttsEndAwaitingDrain = false;
-  if (voiceMachine.active) voiceMachine.onSpeechEnded();
-});
-
-/** Resume listening when a text-only response completes in voice mode. */
+/** Resume listening when the assistant response completes in voice mode. */
 export function notifyAssistantDone(): void {
   const store = useVoiceStore.getState();
   if (voiceMachine.active && store.mode === 'processing') {

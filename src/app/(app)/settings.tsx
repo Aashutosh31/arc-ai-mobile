@@ -19,8 +19,6 @@ export default function SettingsScreen() {
   const identity = useAuthStore((s) => s.identity);
   const credits = useAuthStore((s) => s.credits);
 
-  const voice = useSettingsStore((s) => s.voice);
-  const setVoice = useSettingsStore((s) => s.setVoice);
   const hapticsEnabled = useSettingsStore((s) => s.hapticsEnabled);
   const setHapticsEnabled = useSettingsStore((s) => s.setHapticsEnabled);
 
@@ -30,7 +28,6 @@ export default function SettingsScreen() {
   const createWorkspace = useWorkspaceStore((s) => s.create);
   const archiveWorkspace = useWorkspaceStore((s) => s.archive);
   const [workspaceName, setWorkspaceName] = useState('');
-  const [voiceName, setVoiceName] = useState(voice.voice);
 
   const themes = listThemes();
 
@@ -149,87 +146,10 @@ export default function SettingsScreen() {
 
         <ThemedText variant="label">Voice</ThemedText>
         <Card style={styles.card}>
-          <View style={styles.row}>
-            <ThemedText variant="muted" style={{ flex: 1 }} color={theme.foreground}>
-              Voice provider
-            </ThemedText>
-            <View style={styles.segment}>
-              {(['server', 'browser'] as const).map((p) => (
-                <Pressable
-                  key={p}
-                  onPress={() => setVoice({ provider: p })}
-                  style={[
-                    styles.segmentItem,
-                    {
-                      backgroundColor: voice.provider === p ? theme.primary : 'transparent',
-                      borderColor: theme.border,
-                    },
-                  ]}>
-                  <ThemedText
-                    variant="caption"
-                    color={voice.provider === p ? theme.primaryForeground : theme.foregroundMuted}>
-                    {p}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.row}>
-            <ThemedText variant="muted" style={{ flex: 1 }} color={theme.foreground}>
-              Voice name
-            </ThemedText>
-            <View style={{ width: 140 }}>
-              <TextField
-                value={voiceName}
-                onChangeText={setVoiceName}
-                onBlur={() => setVoice({ voice: voiceName.trim() || voice.voice })}
-                autoCapitalize="words"
-              />
-            </View>
-          </View>
-
-          <View style={styles.row}>
-            <ThemedText variant="muted" style={{ flex: 1 }} color={theme.foreground}>
-              Speech rate
-            </ThemedText>
-            <View style={styles.stepper}>
-              <Pressable
-                hitSlop={8}
-                onPress={() => setVoice({ rate: Math.max(0.5, Number((voice.rate - 0.1).toFixed(1))) })}>
-                <Ionicons name="remove-circle-outline" size={24} color={theme.foreground} />
-              </Pressable>
-              <ThemedText variant="body" style={{ width: 44, textAlign: 'center' }}>
-                {voice.rate.toFixed(1)}x
-              </ThemedText>
-              <Pressable
-                hitSlop={8}
-                onPress={() => setVoice({ rate: Math.min(2, Number((voice.rate + 0.1).toFixed(1))) })}>
-                <Ionicons name="add-circle-outline" size={24} color={theme.foreground} />
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.row}>
-            <ThemedText variant="muted" style={{ flex: 1 }} color={theme.foreground}>
-              Stream speech as it arrives
-            </ThemedText>
-            <Switch
-              value={voice.streamingEnabled}
-              onValueChange={(v) => setVoice({ streamingEnabled: v })}
-              trackColor={{ true: theme.primary, false: theme.borderStrong }}
-            />
-          </View>
-          <View style={styles.row}>
-            <ThemedText variant="muted" style={{ flex: 1 }} color={theme.foreground}>
-              Local fallback voice
-            </ThemedText>
-            <Switch
-              value={voice.fallbackEnabled}
-              onValueChange={(v) => setVoice({ fallbackEnabled: v })}
-              trackColor={{ true: theme.primary, false: theme.borderStrong }}
-            />
-          </View>
+          <ThemedText variant="muted" color={theme.foreground}>
+            Voice input only. ARC no longer speaks replies aloud — it answers in text. You can
+            still talk to ARC with the microphone or voice mode.
+          </ThemedText>
         </Card>
 
         <ThemedText variant="label">Interaction</ThemedText>

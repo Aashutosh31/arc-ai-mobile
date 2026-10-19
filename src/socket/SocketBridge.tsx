@@ -11,7 +11,6 @@ import { useChatStore } from '@/store/chatStore';
 import { useConversationStore } from '@/store/conversationStore';
 import { useWorkspaceStore } from '@/store/workspaceStore';
 import { handleSocketReconnect } from '@/voice/voiceSession';
-import { ttsPlayer } from '@/voice/ttsPlayer';
 
 /**
  * Headless component mounted once at the app root. Owns the socket connection
@@ -128,7 +127,6 @@ export function SocketBridge() {
       useWorkspaceStore.getState().reset();
       useConversationStore.getState().reset();
       useApprovalStore.getState().reset();
-      void ttsPlayer.cancel();
     }
   }, [status]);
 

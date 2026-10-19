@@ -1,6 +1,5 @@
 import type { Socket } from 'socket.io-client';
 
-import { VOICE_STREAM_FORMAT } from '@/constants/config';
 import { applyClientAction, type ClientAction } from '@/socket/clientActions';
 import { SOCKET_EVENTS } from '@/socket/events';
 import { useApprovalStore } from '@/store/approvalStore';
@@ -8,10 +7,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useChatStore } from '@/store/chatStore';
 import { useConversationStore } from '@/store/conversationStore';
 import { useExecutionStore } from '@/store/executionStore';
-import { useVoiceStore } from '@/store/voiceStore';
 import { useWorkspaceStore } from '@/store/workspaceStore';
-import { toPcm16Bytes } from '@/voice/pcm';
-import { ttsPlayer } from '@/voice/ttsPlayer';
 import {
   notifyAssistantDone,
   notifySttCancelled,
@@ -22,8 +18,6 @@ import {
   notifySttSpeechEnd,
   notifySttSpeechStart,
   notifySttStarted,
-  notifyTtsEnded,
-  notifyTtsStarted,
 } from '@/voice/voiceSession';
 
 type Any = Record<string, any>;
@@ -114,50 +108,6 @@ export function registerSocketHandlers(socket: Socket): () => void {
     const message = s(payload?.message) || s(payload?.error) || 'Something went wrong.';
     chat().appendSystemError(message);
     notifySttError(message);
-  });
-
-  // ---- TTS playback ---------------------------------------------------------
-  on(SOCKET_EVENTS.ttsMode, (payload: Any) => {
-    const mode = s(payload?.mode) || s(payload);
-    if (mode === 'server' || mode === 'browser' || mode === 'off') {
-      useVoiceStore.getState().setTtsMode(mode);
-    }
-  });
-
-  on(SOCKET_EVENTS.voiceTtsStart, (payload: Any) => {
-    const streamId = s(payload?.streamId) || 'tts';
-    const sampleRate = Number(payload?.sampleRate) || undefined;
-    notifyTtsStarted();
-    void ttsPlayer.beginStream(streamId, sampleRate);
-  });
-
-  on(SOCKET_EVENTS.voiceTtsAudio, (payload: Any) => {
-    const bytes = toPcm16Bytes(payload?.audio ?? payload);
-    if (!bytes) return;
-    const sampleRate = Number(payload?.sampleRate);
-    const segmentIndex =
-      typeof payload?.segmentIndex === 'number' ? payload.segmentIndex : undefined;
-    ttsPlayer.pushFrame(
-      s(payload?.streamId) || 'tts',
-      bytes,
-      segmentIndex,
-      Number.isFinite(sampleRate) && sampleRate > 0 ? sampleRate : VOICE_STREAM_FORMAT.sampleRate,
-    );
-  });
-
-  on(SOCKET_EVENTS.voiceTtsEnd, (payload: Any) => {
-    ttsPlayer.endStream(s(payload?.streamId) || undefined);
-    notifyTtsEnded();
-  });
-
-  on(SOCKET_EVENTS.voiceTtsError, () => {
-    void ttsPlayer.cancel();
-    notifyTtsEnded();
-  });
-
-  on(SOCKET_EVENTS.voiceTtsCancel, () => {
-    void ttsPlayer.cancel();
-    notifyTtsEnded();
   });
 
   // ---- Streaming STT --------------------------------------------------------

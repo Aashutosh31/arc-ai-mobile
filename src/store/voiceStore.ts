@@ -12,7 +12,6 @@ interface VoiceStoreState {
   finalText: string;
   error: string | null;
   micPermission: MicPermission;
-  ttsMode: 'server' | 'browser' | 'off' | null;
 
   setActive: (v: boolean) => void;
   setCaptureActive: (v: boolean) => void;
@@ -21,7 +20,6 @@ interface VoiceStoreState {
   setFinal: (v: string) => void;
   setError: (v: string | null) => void;
   setMicPermission: (v: MicPermission) => void;
-  setTtsMode: (v: VoiceStoreState['ttsMode']) => void;
   reset: () => void;
 }
 
@@ -33,7 +31,6 @@ export const useVoiceStore = create<VoiceStoreState>((set) => ({
   finalText: '',
   error: null,
   micPermission: 'unknown',
-  ttsMode: null,
 
   setActive: (v) => set({ active: v }),
   setCaptureActive: (v) => set({ captureActive: v }),
@@ -42,7 +39,6 @@ export const useVoiceStore = create<VoiceStoreState>((set) => ({
   setFinal: (v) => set({ finalText: v }),
   setError: (v) => set({ error: v }),
   setMicPermission: (v) => set({ micPermission: v }),
-  setTtsMode: (v) => set({ ttsMode: v }),
   reset: () =>
     set({
       active: false,
