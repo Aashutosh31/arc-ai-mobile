@@ -3,6 +3,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -31,25 +32,27 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.background }}>
       <SafeAreaProvider>
-        <StatusBar style={theme.colorScheme === 'dark' ? 'light' : 'dark'} />
-        <ErrorBoundary>
-          <SocketBridge />
-          <VoiceCapture />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: theme.background },
-            }}>
-            <Stack.Screen name="(app)" />
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="auth" />
-            <Stack.Screen name="auth-link" />
-            <Stack.Screen
-              name="camera"
-              options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-            />
-          </Stack>
-        </ErrorBoundary>
+        <KeyboardProvider>
+          <StatusBar style={theme.colorScheme === 'dark' ? 'light' : 'dark'} />
+          <ErrorBoundary>
+            <SocketBridge />
+            <VoiceCapture />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: theme.background },
+              }}>
+              <Stack.Screen name="(app)" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="auth" />
+              <Stack.Screen name="auth-link" />
+              <Stack.Screen
+                name="camera"
+                options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+              />
+            </Stack>
+          </ErrorBoundary>
+        </KeyboardProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
