@@ -2,6 +2,7 @@ import { StyleSheet } from 'react-native';
 import Markdown, { type RenderRules } from 'react-native-markdown-display';
 
 import { CodeBlock } from '@/components/CodeBlock';
+import { tableRules } from '@/components/MarkdownTable';
 import { useTheme } from '@/store/themeStore';
 import { FontSize, Spacing } from '@/theme/layout';
 
@@ -9,12 +10,13 @@ import { FontSize, Spacing } from '@/theme/layout';
 // declared on the library's ASTNode type, so read it off a cast.
 type FenceNode = { key: string; content?: string; sourceInfo?: string };
 
-/** Custom rule: fenced code → highlighted CodeBlock with copy button. */
+/** Custom rules: fenced code → CodeBlock, tables → wide-aware scroll box. */
 const rules: RenderRules = {
   fence: (node) => {
     const n = node as unknown as FenceNode;
     return <CodeBlock key={n.key} code={String(n.content ?? '').replace(/\n$/, '')} language={n.sourceInfo} />;
   },
+  ...tableRules,
 };
 
 export function MarkdownMessage({ content }: { content: string }) {

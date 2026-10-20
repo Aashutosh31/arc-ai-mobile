@@ -2,8 +2,9 @@ import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { HorizontalScrollBox } from '@/components/HorizontalScrollBox';
 import { highlight, normalizeLang, syntaxPalette, tokenColor } from '@/lib/highlight';
 import { useTheme } from '@/store/themeStore';
 import { FontSize, Spacing } from '@/theme/layout';
@@ -26,8 +27,6 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
     setTimeout(() => setCopied(false), 1400);
   };
 
-  const horizontal = lines.some((l) => l.tokens.some((t) => t.text.length > 40));
-
   return (
     <View style={[styles.wrap, { backgroundColor: theme.surfaceElevated, borderColor: theme.border, borderRadius: theme.radii.md }]}>
       <View style={[styles.header, { borderBottomColor: theme.border }]}>
@@ -43,7 +42,7 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
         </Pressable>
       </View>
 
-      <ScrollView horizontal={horizontal} showsHorizontalScrollIndicator={false}>
+      <HorizontalScrollBox>
         <View style={styles.body}>
           {lines.map((line, i) => (
             <Text key={i} style={[styles.line, { fontFamily: 'monospace' }]} selectable>
@@ -59,7 +58,7 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
             </Text>
           ))}
         </View>
-      </ScrollView>
+      </HorizontalScrollBox>
     </View>
   );
 }
