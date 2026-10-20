@@ -3,7 +3,6 @@ import type { DrawerContentComponentProps } from 'expo-router/drawer';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ActionSheet } from '@/components/ActionSheet';
 import { ThemedText } from '@/components/ui';
 import { useAuthStore } from '@/store/authStore';
 import { useChatStore } from '@/store/chatStore';
@@ -51,6 +51,8 @@ export function ConversationDrawer(props: DrawerContentComponentProps) {
   // A small cross-platform sheet (Modal + TextInput) gives every platform a
   // real rename dialog.
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
+  // Long-press actions are a themed bottom sheet, not the platform Alert.
+  const [menu, setMenu] = useState<{ id: string; title: string; pinned: boolean } | null>(null);
 
   const activeRoute = props.state.routeNames[props.state.index];
   const activeConversationId = useChatStore((s) => s.conversationId);
@@ -83,18 +85,19 @@ export function ConversationDrawer(props: DrawerContentComponentProps) {
 
   const longPress = (id: string) => {
     const current = conversations.find((c) => c._id === id);
-    const items: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' }[] = [
-      {
-        text: 'Rename',
-        onPress: () => {
-          setRenaming({ id, title: current?.title || '' });
-        },
-      },
-      { text: 'Pin / Unpin', onPress: () => void setPinned(id, !current?.pinned) },
-      { text: 'Delete', style: 'destructive', onPress: () => void archive(id) },
-      { text: 'Cancel', style: 'cancel' },
-    ];
-    Alert.alert('Conversation', undefined, items);
+    setMenu({
+      id,
+      title: current?.title || 'Untitled',
+      pinned: Boolean(current?.pinned),
+    });
+  };
+
+  const closeMenuThen = (run: () => void) => {
+    // Close the sheet first: presenting the rename Modal in the same commit as
+    // dismissing the action sheet can be dropped on iOS. The short delay lets
+    // the fade finish without a visible wait.
+    setMenu(null);
+    setTimeout(run, 200);
   };
 
   const submitRename = () => {
@@ -272,6 +275,45 @@ export function ConversationDrawer(props: DrawerContentComponentProps) {
           </View>
         </Modal>
       ) : null}
+
+      <ActionSheet
+        visible={Boolean(menu)}
+        title="Conversation"
+        subtitle={menu?.title}
+        onClose={() => setMenu(null)}
+        items={
+          menu
+            ? [
+                {
+                  key: 'rename',
+                  label: 'Rename',
+                  icon: 'pencil-outline',
+                  onPress: () =>
+                    closeMenuThen(() => setRenaming({ id: menu.id, title: menu.title })),
+                },
+                {
+                  key: 'pin',
+                  label: menu.pinned ? 'Unpin' : 'Pin',
+                  icon: menu.pinned ? 'bookmark' : 'bookmark-outline',
+                  onPress: () => {
+                    setMenu(null);
+                    void setPinned(menu.id, !menu.pinned);
+                  },
+                },
+                {
+                  key: 'delete',
+                  label: 'Delete',
+                  icon: 'trash-outline',
+                  tone: 'destructive',
+                  onPress: () => {
+                    setMenu(null);
+                    void archive(menu.id);
+                  },
+                },
+              ]
+            : []
+        }
+      />
     </View>
   );
 }
