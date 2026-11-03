@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { saveActiveConversationId } from '@/lib/activeConversation';
 import { deriveAttachmentFields, sanitizeHistoryText } from '@/lib/conversationHistory';
+import type { ToolCall } from '@/types/api';
 
 /** Durable `conversation.message.appended` record (sync Phase A payload). */
 export interface ServerAppendedMessage {
@@ -9,6 +10,7 @@ export interface ServerAppendedMessage {
   role?: string;
   content?: string;
   attachments?: unknown[];
+  toolCalls?: ToolCall[];
   streaming?: boolean;
   interrupted?: boolean;
   createdAt?: string;
@@ -22,6 +24,7 @@ export interface UiMessage {
   interrupted: boolean;
   image?: string;
   documentName?: string;
+  toolCalls?: ToolCall[];
   createdAt?: number;
   /**
    * True while the turn receipt (`ai:stt:final` ack) is outstanding. Pure
@@ -71,7 +74,10 @@ interface ChatState {
    * streaming draft converging to final — unknown ids append. Optimistic
    * bubbles without a receipt-stamp stay below untouched.
    */
-  mergeServerMessage: (message: ServerAppendedMessage | null) => void;
+  mergeServerMessage: (
+    message: ServerAppendedMessage | null,
+    opts?: { foldLocalAssistant?: boolean },
+  ) => void;
   beginAssistantMessage: () => void;
   appendChunk: (delta: string) => void;
   finishAssistantStream: (opts?: { interrupted?: boolean }) => void;
@@ -139,7 +145,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ),
     })),
 
-  mergeServerMessage: (message) => {
+  mergeServerMessage: (message, opts) => {
     if (!message?._id || typeof message._id !== 'string') return;
     const sid = message._id;
     const media = deriveAttachmentFields(message.attachments);
@@ -150,17 +156,43 @@ export const useChatStore = create<ChatState>((set, get) => ({
       isStreaming: Boolean(message.streaming) && message.role !== 'user',
       interrupted: Boolean(message.interrupted),
       ...media,
+      toolCalls: Array.isArray(message.toolCalls) ? message.toolCalls : [],
       createdAt: message.createdAt ? new Date(message.createdAt).getTime() : undefined,
     };
     set((s) => {
-      const idx = s.messages.findIndex(
+      let idx = s.messages.findIndex(
         (m) => m.serverId === sid || m.id === sid,
       );
+      if (idx === -1 && opts?.foldLocalAssistant && next.sender === 'ai') {
+        // Origin-device finalize (`ai:assistant:finalized`): the device that
+        // sent the turn already holds the streamed bubble, which has no
+        // durable id. Fold the canonical record into the most recent finished
+        // local assistant bubble so it gains the server id + tool calls.
+        for (let i = s.messages.length - 1; i >= 0; i -= 1) {
+          const m = s.messages[i];
+          if (
+            m.sender === 'ai' &&
+            !m.isStreaming &&
+            typeof m.id === 'string' &&
+            m.id.startsWith('local_')
+          ) {
+            idx = i;
+            break;
+          }
+        }
+      }
       if (idx !== -1) {
         const messages = [...s.messages];
-        // Preserve optimistic-only fields (image/doc for pre-ack bubbles) —
-        // the server record is authoritative for content/ids.
-        messages[idx] = { ...messages[idx], ...next, id: messages[idx].id === sid ? sid : messages[idx].id };
+        const prev = messages[idx];
+        // The server record is authoritative for content/tool calls, and the
+        // folded origin bubble adopts the durable id. An ack-stamped optimistic
+        // user bubble keeps its local id (it already exposes `serverId`), so
+        // pending-state identity and the list key stay stable.
+        messages[idx] = {
+          ...prev,
+          ...next,
+          id: prev.serverId === sid && prev.id !== sid ? prev.id : sid,
+        };
         return { messages };
       }
       return { messages: [...s.messages, next] };

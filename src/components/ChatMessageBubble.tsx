@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 
 import { MarkdownMessage } from '@/components/MarkdownMessage';
+import { ToolCallList } from '@/components/ToolCallCard';
 import { ThemedText } from '@/components/ui';
 import { regenerateLast } from '@/chat/chatController';
 import type { UiMessage } from '@/store/chatStore';
@@ -65,22 +66,27 @@ export function ChatMessageBubble({
           </View>
         ) : null}
 
-        {message.text ? (
-          isUser ? (
+        {isUser ? (
+          message.text ? (
             <Pressable onLongPress={copy}>
               <ThemedText variant="body" color={theme.primaryForeground}>
                 {message.text}
               </ThemedText>
             </Pressable>
-          ) : (
-            <Pressable onLongPress={copy}>
-              <MarkdownMessage content={message.text} />
-              {message.isStreaming ? <StreamCursor /> : null}
-            </Pressable>
-          )
-        ) : message.isStreaming ? (
-          <ThinkingDots />
-        ) : null}
+          ) : null
+        ) : (
+          <>
+            <ToolCallList calls={message.toolCalls} />
+            {message.text ? (
+              <Pressable onLongPress={copy}>
+                <MarkdownMessage content={message.text} />
+                {message.isStreaming ? <StreamCursor /> : null}
+              </Pressable>
+            ) : message.isStreaming ? (
+              <ThinkingDots />
+            ) : null}
+          </>
+        )}
 
         {message.interrupted ? (
           <ThemedText variant="caption" color={theme.warning} style={{ marginTop: Spacing.xs }}>

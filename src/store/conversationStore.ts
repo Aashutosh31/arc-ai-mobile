@@ -17,6 +17,7 @@ export function mapChatMessagesToUi(messages: ChatMessage[]): UiMessage[] {
       isStreaming: Boolean((m as any).streaming ?? false),
       interrupted: false,
       ...deriveAttachmentFields(m.attachments),
+      toolCalls: Array.isArray(m.toolCalls) ? m.toolCalls : [],
       createdAt: new Date(m.createdAt).getTime(),
     }));
 }

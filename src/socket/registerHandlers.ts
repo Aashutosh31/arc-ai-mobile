@@ -82,21 +82,41 @@ export function registerSocketHandlers(socket: Socket): () => void {
   // every device of this user. Only the OPEN thread is folded in (dedupe /
   // replace by the record's `_id` in chatStore.mergeServerMessage); non-open
   // records are ignored — the conversation list refetches on created/title.
+  const toServerMessage = (message: Any) => ({
+    _id: s(message._id),
+    role: s(message.role),
+    content: typeof message.content === 'string' ? message.content : '',
+    attachments: Array.isArray(message.attachments) ? message.attachments : [],
+    toolCalls: Array.isArray(message.toolCalls) ? message.toolCalls : [],
+    streaming: Boolean(message.streaming),
+    interrupted: Boolean(message.interrupted),
+    createdAt: typeof message.createdAt === 'string' ? message.createdAt : undefined,
+  });
+
   on(SOCKET_EVENTS.messageAppended, (payload: Any) => {
     const convId = s(payload?.conversationId);
     const message = payload?.message;
     if (!convId || !message || !s(message?._id)) return;
     if (convId === useChatStore.getState().conversationId) {
-      useChatStore.getState().mergeServerMessage({
-        _id: s(message._id),
-        role: s(message.role),
-        content: typeof message.content === 'string' ? message.content : '',
-        attachments: Array.isArray(message.attachments) ? message.attachments : [],
-        streaming: Boolean(message.streaming),
-        interrupted: Boolean(message.interrupted),
-        createdAt: typeof message.createdAt === 'string' ? message.createdAt : undefined,
-      });
+      useChatStore.getState().mergeServerMessage(toServerMessage(message));
     }
+  });
+
+  // Origin-device finalize: the durable assistant record (including
+  // `toolCalls`) for the turn THIS device just streamed. Fan-out excludes the
+  // origin socket, so without this the sender would only see tool cards after
+  // a reload. Fold it into the local streamed bubble so it gains the server id
+  // + tool calls.
+  on(SOCKET_EVENTS.assistantFinalized, (payload: Any) => {
+    const convId = s(payload?.conversationId);
+    const message = payload?.message;
+    if (!convId || !message || !s(message?._id)) return;
+    if (convId !== useChatStore.getState().conversationId) return;
+    // Ends the turn if the final text chunk was dropped; a no-op otherwise.
+    chat().finishAssistantStream();
+    useChatStore
+      .getState()
+      .mergeServerMessage(toServerMessage(message), { foldLocalAssistant: true });
   });
 
   on(SOCKET_EVENTS.clientAction, (payload: Any) => {

@@ -4,6 +4,8 @@
 // Pure module: no React, no JSX. Server history is authoritative persisted
 // history; message identity is the database _id.
 
+import type { ToolCall } from '@/types/api';
+
 export const CURSOR_PAGE_SIZE = 40;
 
 export interface UiHistoryMessage {
@@ -15,6 +17,7 @@ export interface UiHistoryMessage {
   attachments?: unknown[];
   image?: string;
   documentName?: string;
+  toolCalls?: ToolCall[];
 }
 
 interface RawMessage {
@@ -26,6 +29,7 @@ interface RawMessage {
   sender?: string;
   interrupted?: boolean;
   attachments?: unknown[];
+  toolCalls?: unknown[];
   image?: string;
   documentName?: string;
   metadata?: { interrupted?: boolean };
@@ -78,6 +82,7 @@ export function normalizeHistoryMessage(raw: unknown): UiHistoryMessage | null {
     return null;
   }
   const role = r.role ?? r.sender ?? 'ai';
+  const toolCalls = Array.isArray(r.toolCalls) ? (r.toolCalls as ToolCall[]) : [];
   return {
     id: id === null || id === undefined ? null : String(id),
     sender: role === 'user' ? 'user' : 'ai',
@@ -87,6 +92,7 @@ export function normalizeHistoryMessage(raw: unknown): UiHistoryMessage | null {
     ...(attachments.length > 0 ? { attachments } : {}),
     ...(r.image ? { image: r.image } : {}),
     ...(r.documentName ? { documentName: r.documentName } : {}),
+    ...(toolCalls.length > 0 ? { toolCalls } : {}),
   };
 }
 
