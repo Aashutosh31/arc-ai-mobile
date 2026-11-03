@@ -130,31 +130,6 @@ export interface SearchResponse {
   stats: { total: number; conversations: number; messages: number; memories: number };
 }
 
-export interface TtsConfig {
-  streamingAvailable: boolean;
-  provider: 'server' | 'browser-fallback';
-  format: {
-    encoding: string;
-    codec: string;
-    sampleRate: number;
-    channels: number;
-    bitDepth: number;
-    endianness: string;
-  };
-  events: string[];
-  fallback: string;
-  stt: {
-    available: boolean;
-    provider: string | null;
-    format: Record<string, unknown>;
-    limits: { maxBytes: number; maxMs: number };
-    events: string[];
-    usesBrowserSpeechRecognition: boolean;
-    normalization: boolean;
-    safety: { destructiveCommandsRequireConfirmation: boolean };
-  };
-}
-
 /** Payload for the main AI turn event (`ai:stt:final`). */
 export interface TurnPayload {
   command: string;

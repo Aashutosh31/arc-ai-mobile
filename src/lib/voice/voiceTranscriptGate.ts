@@ -6,6 +6,7 @@ export interface TranscriptGateInput {
   needsClarification?: boolean;
   destructive?: { verb?: string; [k: string]: unknown } | null;
   reason?: string | null;
+  lowConfidence?: boolean;
 }
 
 export const shouldGateTranscript = (data: string | TranscriptGateInput | null): boolean => {

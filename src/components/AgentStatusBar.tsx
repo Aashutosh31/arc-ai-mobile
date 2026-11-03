@@ -10,20 +10,11 @@ export function AgentStatusBar() {
   const theme = useTheme();
   const status = useChatStore((s) => s.agentStatus);
   const provider = useChatStore((s) => s.providerInfo);
-  const speaking = useChatStore((s) => s.isSpeaking);
 
-  if (!status && !speaking && !provider) return null;
+  if (!status && !provider) return null;
 
   return (
     <View style={[styles.wrap, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-      {speaking ? (
-        <View style={styles.row}>
-          <Ionicons name="volume-high" size={14} color={theme.primary} />
-          <ThemedText variant="caption" color={theme.primary}>
-            Speaking
-          </ThemedText>
-        </View>
-      ) : null}
       {status ? (
         <View style={styles.row}>
           <Ionicons name="sparkles" size={14} color={theme.accent} />

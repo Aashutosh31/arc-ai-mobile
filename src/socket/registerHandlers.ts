@@ -138,7 +138,14 @@ export function registerSocketHandlers(socket: Socket): () => void {
   on(SOCKET_EVENTS.sttInterim, (payload: Any) => notifySttInterim(s(payload?.text)));
   on(SOCKET_EVENTS.sttSpeechStart, () => notifySttSpeechStart());
   on(SOCKET_EVENTS.sttSpeechEnd, (payload: Any) => notifySttSpeechEnd(s(payload?.sessionId)));
-  on(SOCKET_EVENTS.sttFinal, (payload: Any) => notifySttFinal(s(payload?.text), s(payload?.sessionId)));
+  on(SOCKET_EVENTS.sttFinal, (payload: Any) =>
+    notifySttFinal(s(payload?.text), s(payload?.sessionId), {
+      needsClarification: Boolean(payload?.needsClarification),
+      destructive: payload?.destructive ?? null,
+      reason: payload?.reason ?? null,
+      lowConfidence: Boolean(payload?.lowConfidence),
+    }),
+  );
   on(SOCKET_EVENTS.sttEnd, () => notifySttEnd());
   on(SOCKET_EVENTS.sttError, (payload: Any) =>
     notifySttError(s(payload?.message) || s(payload?.error) || 'Speech recognition failed.'),

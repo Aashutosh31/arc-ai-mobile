@@ -5,7 +5,12 @@ import { VoiceInteractionMachine } from '@/lib/voice/voiceInteractionMachine';
 import { SOCKET_EVENTS } from '@/socket/events';
 import { emitEvent } from '@/socket/socketClient';
 import { useDiagnosticsStore } from '@/store/diagnosticsStore';
+import { useComposerStore } from '@/store/composerStore';
 import { useVoiceStore } from '@/store/voiceStore';
+import {
+  shouldGateTranscript,
+  type TranscriptGateInput,
+} from '@/lib/voice/voiceTranscriptGate';
 import { resamplePcm16 } from '@/voice/pcm';
 import { stopGeneration, submitTurn } from '@/chat/chatController';
 
@@ -184,7 +189,11 @@ export function notifySttSpeechStart(): void {
   useVoiceStore.getState().setInterim('');
 }
 
-export function notifySttFinal(text: string, sid?: string): void {
+export function notifySttFinal(
+  text: string,
+  sid?: string,
+  gate: Omit<TranscriptGateInput, 'text'> = {},
+): void {
   // Ignore a superseded session's final: it belongs to a turn we already moved on from.
   if (sid && sessionId && sid !== sessionId) return;
   const store = useVoiceStore.getState();
@@ -198,6 +207,17 @@ export function notifySttFinal(text: string, sid?: string): void {
     // in `processing` with a dead STT session.
     if (voiceMachine.state === 'listening') voiceMachine.restartListening('empty transcript');
     else if (voiceMachine.state === 'processing') voiceMachine.onSpeechEnded();
+    return;
+  }
+
+  // Destructive/low-confidence transcripts must be confirmed, never spoken
+  // straight into a turn. Park the text in the themed composer, leave voice
+  // mode, and let the user send it explicitly (web parity).
+  if (shouldGateTranscript({ ...gate, text: transcript })) {
+    const composer = useComposerStore.getState();
+    const draft = composer.text.trim();
+    composer.setText(draft ? `${draft}\n${transcript}` : transcript);
+    voiceMachine.deactivate('transcript needs confirmation');
     return;
   }
 

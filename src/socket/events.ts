@@ -17,16 +17,6 @@ export const SOCKET_EVENTS = {
   clientAction: 'ai:client:action',
   botError: 'bot_error',
 
-  // TTS mode + streaming PCM
-  ttsMode: 'ai:tts:mode',
-  ttsLegacyAudio: 'ai:tts:audio',
-  ttsLegacyStop: 'ai:tts:audio:stop',
-  voiceTtsStart: 'voice:tts:start',
-  voiceTtsAudio: 'voice:tts:audio',
-  voiceTtsEnd: 'voice:tts:end',
-  voiceTtsError: 'voice:tts:error',
-  voiceTtsCancel: 'voice:tts:cancel',
-
   // Streaming STT
   sttStart: 'voice:stt:start',
   sttAudio: 'voice:stt:audio',

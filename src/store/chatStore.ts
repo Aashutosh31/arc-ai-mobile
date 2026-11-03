@@ -52,7 +52,6 @@ interface ChatState {
   messages: UiMessage[];
   isStreaming: boolean;
   isProcessing: boolean;
-  isSpeaking: boolean;
   agentStatus: string | null;
   providerInfo: { provider: string | null; fallbackUsed: boolean; detail: string } | null;
   media: MediaState | null;
@@ -89,7 +88,6 @@ interface ChatState {
   appendChunk: (delta: string) => void;
   finishAssistantStream: (opts?: { interrupted?: boolean }) => void;
   setProcessing: (v: boolean) => void;
-  setSpeaking: (v: boolean) => void;
   setAgentStatus: (status: string | null) => void;
   setProviderInfo: (info: ChatState['providerInfo']) => void;
   setMedia: (media: MediaState | null) => void;
@@ -108,7 +106,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isStreaming: false,
   isProcessing: false,
-  isSpeaking: false,
   agentStatus: null,
   providerInfo: null,
   media: null,
@@ -274,7 +271,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }),
 
   setProcessing: (v) => set({ isProcessing: v }),
-  setSpeaking: (v) => set({ isSpeaking: v }),
   setAgentStatus: (status) => set({ agentStatus: status }),
   setProviderInfo: (info) => set({ providerInfo: info }),
   setMedia: (media) => set({ media }),
@@ -304,7 +300,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: [],
       isStreaming: false,
       isProcessing: false,
-      isSpeaking: false,
       agentStatus: null,
       providerInfo: null,
       media: null,

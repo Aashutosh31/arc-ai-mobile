@@ -1,4 +1,4 @@
-import type { SearchResponse, TtsConfig } from '@/types/api';
+import type { SearchResponse } from '@/types/api';
 
 import { http } from './client';
 
@@ -12,10 +12,6 @@ export const searchApi = {
 };
 
 export const voiceApi = {
-  ttsConfig: async (): Promise<TtsConfig> => {
-    const { data } = await http.get<TtsConfig>('/voice/tts-config');
-    return data;
-  },
   /** Legacy single-shot transcription (charges 1 credit). */
   transcribe: async (
     audioBase64: string,

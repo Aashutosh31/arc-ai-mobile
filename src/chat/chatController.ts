@@ -298,7 +298,6 @@ export function regenerateLast(): void {
 export function stopGeneration(): void {
   emitEvent(SOCKET_EVENTS.streamStop);
   useChatStore.getState().finishAssistantStream({ interrupted: true });
-  useChatStore.getState().setSpeaking(false);
   // A stopped queued turn must not wedge the rest of the queue.
   noteTurnSettled();
 }
