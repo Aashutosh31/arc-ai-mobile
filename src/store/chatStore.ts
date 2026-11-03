@@ -33,6 +33,11 @@ export interface UiMessage {
   pending?: boolean;
   /** Durable server message id, filled when the turn receipt arrives. */
   serverId?: string;
+  /**
+   * Type-while-offline: the turn is held in the in-memory send queue and goes
+   * out (in order) once the socket reconnects.
+   */
+  queued?: boolean;
 }
 
 export interface MediaState {
@@ -67,6 +72,8 @@ interface ChatState {
    * guest turns and timeouts where no durable id will ever exist.
    */
   confirmUserMessage: (id: string, serverId: string | null) => void;
+  /** Mark/clear the type-while-offline badge on an optimistic user bubble. */
+  setMessageQueued: (id: string, queued: boolean) => void;
   /**
    * Fold one durable `conversation.message.appended` record into the live
    * transcript (sync Phase B). Reconciles by the canonical server `_id`:
@@ -141,8 +148,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
   confirmUserMessage: (id, serverId) =>
     set((s) => ({
       messages: s.messages.map((m) =>
-        m.id === id ? { ...m, pending: false, serverId: serverId ?? m.serverId } : m,
+        m.id === id
+          ? { ...m, pending: false, queued: false, serverId: serverId ?? m.serverId }
+          : m,
       ),
+    })),
+
+  setMessageQueued: (id, queued) =>
+    set((s) => ({
+      messages: s.messages.map((m) => (m.id === id ? { ...m, queued } : m)),
     })),
 
   mergeServerMessage: (message, opts) => {

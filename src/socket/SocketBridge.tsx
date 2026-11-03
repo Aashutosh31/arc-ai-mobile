@@ -3,6 +3,11 @@ import { AppState } from 'react-native';
 import type { Socket } from 'socket.io-client';
 
 import { loadActiveConversationId, saveActiveConversationId } from '@/lib/activeConversation';
+import {
+  clearTurnQueue,
+  flushQueuedTurns,
+  resetTurnQueueFlush,
+} from '@/chat/chatController';
 import { registerSocketHandlers } from '@/socket/registerHandlers';
 import { connectSocket, disconnectSocket, getSocket } from '@/socket/socketClient';
 import { useApprovalStore } from '@/store/approvalStore';
@@ -27,6 +32,7 @@ export function SocketBridge() {
       detachRef.current?.();
       detachRef.current = null;
       disconnectSocket();
+      clearTurnQueue();
       useChatStore.getState().setConnection('offline', null);
       return;
     }
@@ -69,11 +75,20 @@ export function SocketBridge() {
       // A dropped connection kills the server-side STT session; re-open it so
       // voice mode keeps working after a reconnect.
       handleSocketReconnect();
-      void reload();
+      // Catch-up first, then replay turns typed while offline: `refreshCurrent`
+      // merges durable history around the held bubbles, and the queue sends one
+      // turn at a time so the server never aborts a queued turn for the next.
+      void reload().then(() => flushQueuedTurns());
     };
     const onDisconnect = () => {
       useChatStore.getState().setConnection('offline', 'Disconnected from ARC-AI.');
       useChatStore.getState().setProcessing(false);
+      // A dropped socket can never deliver the final chunk. Close the live
+      // bubble (no "[stopped]" marker — the user didn't stop it) so it doesn't
+      // hang with a cursor and block reconnect catch-up (`refreshCurrent`
+      // skips while a stream is drawing).
+      useChatStore.getState().finishAssistantStream();
+      resetTurnQueueFlush();
       handleSocketReconnect();
     };
     const onConnectError = (err: Error) => {
@@ -123,6 +138,7 @@ export function SocketBridge() {
   // Reset per-session state on sign-out.
   useEffect(() => {
     if (status === 'unauthenticated') {
+      clearTurnQueue();
       useChatStore.getState().reset();
       useWorkspaceStore.getState().reset();
       useConversationStore.getState().reset();

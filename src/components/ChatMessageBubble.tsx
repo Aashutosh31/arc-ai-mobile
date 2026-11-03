@@ -67,13 +67,27 @@ export function ChatMessageBubble({
         ) : null}
 
         {isUser ? (
-          message.text ? (
-            <Pressable onLongPress={copy}>
-              <ThemedText variant="body" color={theme.primaryForeground}>
-                {message.text}
-              </ThemedText>
-            </Pressable>
-          ) : null
+          <>
+            {message.text ? (
+              <Pressable onLongPress={copy}>
+                <ThemedText variant="body" color={theme.primaryForeground}>
+                  {message.text}
+                </ThemedText>
+              </Pressable>
+            ) : null}
+            {message.queued ? (
+              <View style={styles.queuedRow}>
+                <Ionicons
+                  name="cloud-upload-outline"
+                  size={12}
+                  color={theme.primaryForeground}
+                />
+                <ThemedText variant="caption" color={theme.primaryForeground} style={styles.queuedText}>
+                  Queued — sends when you reconnect
+                </ThemedText>
+              </View>
+            ) : null}
+          </>
         ) : (
           <>
             <ToolCallList calls={message.toolCalls} />
@@ -170,6 +184,14 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  queuedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: Spacing.xs,
+    opacity: 0.85,
+  },
+  queuedText: { fontSize: 11 },
   docRow: {
     flexDirection: 'row',
     alignItems: 'center',

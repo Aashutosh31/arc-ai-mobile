@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { conversationsApi } from '@/api/conversations';
+import { flushQueuedTurns, queuedBubbles } from '@/chat/chatController';
 import { deriveAttachmentFields, sanitizeHistoryText } from '@/lib/conversationHistory';
 import { useChatStore, type UiMessage } from '@/store/chatStore';
 import { useWorkspaceStore } from '@/store/workspaceStore';
@@ -71,11 +72,14 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       limit: 30,
       workspaceId,
     });
-    chat.setMessages(mapChatMessagesToUi(page.messages));
+    chat.setMessages([...mapChatMessagesToUi(page.messages), ...queuedBubbles(conversationId)]);
     set({
       hasMore: page.page?.hasMore ?? page.hasMore ?? false,
       nextBefore: page.page?.nextBefore ?? null,
     });
+    // Turns typed while offline for THIS thread can now be replayed (the queue
+    // only sends when the owning conversation is the one on screen).
+    flushQueuedTurns();
   },
 
   // Reconnect / foreground catch-up (sync Phase B): the server transcript is
@@ -92,7 +96,12 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         workspaceId,
       });
       if (useChatStore.getState().conversationId === chat.conversationId) {
-        chat.setMessages(mapChatMessagesToUi(page.messages));
+        // Server history is canonical; held (offline-queued) bubbles are not on
+        // the server yet, so append them rather than erasing the turn.
+        chat.setMessages([
+          ...mapChatMessagesToUi(page.messages),
+          ...queuedBubbles(chat.conversationId),
+        ]);
       }
       set({
         hasMore: page.page?.hasMore ?? page.hasMore ?? false,
@@ -105,6 +114,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
   startNew: () => {
     useChatStore.getState().reset();
+    useChatStore.getState().setMessages(queuedBubbles(null));
     set({ hasMore: false, nextBefore: null });
   },
 

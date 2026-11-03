@@ -1,5 +1,6 @@
 import type { Socket } from 'socket.io-client';
 
+import { noteTurnSettled } from '@/chat/chatController';
 import { applyClientAction, type ClientAction } from '@/socket/clientActions';
 import { SOCKET_EVENTS } from '@/socket/events';
 import { useApprovalStore } from '@/store/approvalStore';
@@ -41,6 +42,7 @@ export function registerSocketHandlers(socket: Socket): () => void {
     if (payload?.isFinal || payload?.final) {
       chat().finishAssistantStream();
       notifyAssistantDone();
+      noteTurnSettled();
     }
   });
 
@@ -117,6 +119,7 @@ export function registerSocketHandlers(socket: Socket): () => void {
     useChatStore
       .getState()
       .mergeServerMessage(toServerMessage(message), { foldLocalAssistant: true });
+    noteTurnSettled();
   });
 
   on(SOCKET_EVENTS.clientAction, (payload: Any) => {
