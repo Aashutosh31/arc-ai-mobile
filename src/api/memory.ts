@@ -8,32 +8,63 @@ export const memoryApi = {
     const { data } = await http.get<MemoryDashboard>('/memory', { params });
     return data;
   },
-  setLearningEnabled: async (memoryLearningEnabled: boolean) => {
+  setLearningEnabled: async (memoryLearningEnabled: boolean, workspaceId?: string | null) => {
     const { data } = await http.patch('/memory/preferences', {
       memoryLearningEnabled,
+      workspaceId: workspaceId ?? undefined,
+    });
+    return data;
+  },
+  createFact: async (
+    patch: { fact: string; category?: string; layer?: string; pinned?: boolean },
+    workspaceId?: string | null,
+  ): Promise<MemoryFact> => {
+    const { data } = await http.post<MemoryFact>('/memory/facts', {
+      ...patch,
+      workspaceId: workspaceId ?? undefined,
     });
     return data;
   },
   updateFact: async (
     memoryId: string,
-    patch: { fact?: string; category?: string; pinned?: boolean },
+    patch: { fact?: string; category?: string; layer?: string; pinned?: boolean },
+    workspaceId?: string | null,
   ): Promise<MemoryFact> => {
-    const { data } = await http.patch(`/memory/facts/${memoryId}`, patch);
+    const { data } = await http.patch<MemoryFact>(`/memory/facts/${memoryId}`, {
+      ...patch,
+      workspaceId: workspaceId ?? undefined,
+    });
     return data;
   },
-  deleteFact: async (memoryId: string): Promise<{ deletedCount: number }> => {
-    const { data } = await http.delete(`/memory/facts/${memoryId}`);
+  deleteFact: async (
+    memoryId: string,
+    workspaceId?: string | null,
+  ): Promise<{ deletedCount: number }> => {
+    const { data } = await http.delete<{ deletedCount: number }>(
+      `/memory/facts/${memoryId}`,
+      { params: workspaceId ? { workspaceId } : undefined },
+    );
     return data;
   },
   updateSemantic: async (
     memoryId: string,
-    patch: { query?: string; response?: string; tags?: string[]; pinned?: boolean },
+    patch: { query?: string; response?: string; summary?: string; layer?: string; tags?: string[]; pinned?: boolean },
+    workspaceId?: string | null,
   ): Promise<SemanticMemory> => {
-    const { data } = await http.patch(`/memory/semantic/${memoryId}`, patch);
+    const { data } = await http.patch<SemanticMemory>(`/memory/semantic/${memoryId}`, {
+      ...patch,
+      workspaceId: workspaceId ?? undefined,
+    });
     return data;
   },
-  deleteSemantic: async (memoryId: string): Promise<{ deletedCount: number }> => {
-    const { data } = await http.delete(`/memory/semantic/${memoryId}`);
+  deleteSemantic: async (
+    memoryId: string,
+    workspaceId?: string | null,
+  ): Promise<{ deletedCount: number }> => {
+    const { data } = await http.delete<{ deletedCount: number }>(
+      `/memory/semantic/${memoryId}`,
+      { params: workspaceId ? { workspaceId } : undefined },
+    );
     return data;
   },
 };

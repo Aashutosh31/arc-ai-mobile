@@ -21,6 +21,10 @@ export default function MemoryScreen() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchItem[] | null>(null);
+  const [newFact, setNewFact] = useState('');
+  const [newCategory, setNewCategory] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const memoryLearningEnabled = useSettingsStore((s) => s.memoryLearningEnabled);
   const setMemoryLearningEnabled = useSettingsStore((s) => s.setMemoryLearningEnabled);
 
@@ -50,37 +54,59 @@ export default function MemoryScreen() {
       return;
     }
     try {
-      const res = await searchApi.search(q);
+      const res = await searchApi.search(q, 10, activeWorkspaceId);
       setResults(res.items ?? []);
     } catch (err) {
       setError(extractApiError(err).message);
     }
   };
 
+  const addFact = async () => {
+    const fact = newFact.trim();
+    if (!fact || adding) return;
+    setAdding(true);
+    setAddError(null);
+    try {
+      await memoryApi.createFact(
+        { fact, category: newCategory.trim() || 'general' },
+        activeWorkspaceId,
+      );
+      setNewFact('');
+      setNewCategory('');
+      await load();
+    } catch (err) {
+      setAddError(extractApiError(err).message);
+    } finally {
+      setAdding(false);
+    }
+  };
+
   const removeFact = async (id: string) => {
     setData((d) => (d ? { ...d, facts: d.facts.filter((f) => f._id !== id) } : d));
-    await memoryApi.deleteFact(id).catch(() => {});
+    await memoryApi.deleteFact(id, activeWorkspaceId).catch(() => {});
   };
   const removeSemantic = async (id: string) => {
     setData((d) => (d ? { ...d, memories: d.memories.filter((m) => m._id !== id) } : d));
-    await memoryApi.deleteSemantic(id).catch(() => {});
+    await memoryApi.deleteSemantic(id, activeWorkspaceId).catch(() => {});
   };
   const togglePinFact = async (id: string, pinned: boolean) => {
     setData((d) =>
       d ? { ...d, facts: d.facts.map((f) => (f._id === id ? { ...f, pinned } : f)) } : d,
     );
-    await memoryApi.updateFact(id, { pinned }).catch(() => {});
+    await memoryApi.updateFact(id, { pinned }, activeWorkspaceId).catch(() => {});
   };
   const togglePinSemantic = async (id: string, pinned: boolean) => {
     setData((d) =>
       d ? { ...d, memories: d.memories.map((m) => (m._id === id ? { ...m, pinned } : m)) } : d,
     );
-    await memoryApi.updateSemantic(id, { pinned }).catch(() => {});
+    await memoryApi.updateSemantic(id, { pinned }, activeWorkspaceId).catch(() => {});
   };
 
   const onLearningToggle = async (v: boolean) => {
     setMemoryLearningEnabled(v);
-    await memoryApi.setLearningEnabled(v).catch(() => setMemoryLearningEnabled(!v));
+    await memoryApi
+      .setLearningEnabled(v, activeWorkspaceId)
+      .catch(() => setMemoryLearningEnabled(!v));
   };
 
   return (
@@ -113,6 +139,47 @@ export default function MemoryScreen() {
               thumbColor="#fff"
             />
           </View>
+        </View>
+
+        <View style={[styles.card, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+          <View style={styles.row}>
+            <Ionicons name="add-circle-outline" size={20} color={theme.accent} />
+            <View style={{ flex: 1 }}>
+              <ThemedText variant="body" style={{ fontWeight: '600' }}>
+                Add a fact
+              </ThemedText>
+              <ThemedText variant="caption">Teach ARC something durable about you.</ThemedText>
+            </View>
+          </View>
+          <TextField
+            placeholder="e.g. I prefer concise status updates"
+            value={newFact}
+            onChangeText={setNewFact}
+          />
+          <TextField
+            placeholder="Category (preferences, work, family…)"
+            value={newCategory}
+            onChangeText={setNewCategory}
+          />
+          <Pressable
+            onPress={() => void addFact()}
+            disabled={!newFact.trim() || adding}
+            style={[
+              styles.addButton,
+              {
+                borderColor: theme.primary,
+                opacity: !newFact.trim() || adding ? 0.5 : 1,
+              },
+            ]}>
+            <ThemedText variant="label" color={theme.primary}>
+              {adding ? 'Saving…' : 'Add fact'}
+            </ThemedText>
+          </Pressable>
+          {addError ? (
+            <ThemedText variant="caption" color={theme.destructive}>
+              {addError}
+            </ThemedText>
+          ) : null}
         </View>
 
         <TextField
@@ -170,8 +237,12 @@ export default function MemoryScreen() {
                       </Pressable>
                     </View>
                     {fact.category ? (
-                      <ThemedText variant="caption">{fact.category}</ThemedText>
-                    ) : null}
+                      <ThemedText variant="caption">
+                        {fact.layer || 'semantic'} · {fact.category}
+                      </ThemedText>
+                    ) : (
+                      <ThemedText variant="caption">{fact.layer || 'semantic'}</ThemedText>
+                    )}
                   </Card>
                 ))
               ) : (
@@ -204,6 +275,9 @@ export default function MemoryScreen() {
                     <ThemedText variant="muted" numberOfLines={4}>
                       {memory.response}
                     </ThemedText>
+                    <ThemedText variant="caption">
+                      {memory.layer || 'episodic'} · {memory.source || 'conversation'}
+                    </ThemedText>
                   </Card>
                 ))
               ) : (
@@ -219,7 +293,14 @@ export default function MemoryScreen() {
 
 const styles = StyleSheet.create({
   content: { padding: Spacing.lg, gap: Spacing.lg, paddingBottom: Spacing.xxl },
-  card: { padding: Spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: Spacing.md },
+  card: { padding: Spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: Spacing.md, gap: Spacing.sm },
   item: { padding: Spacing.md, gap: Spacing.xs },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  addButton: {
+    alignSelf: 'flex-start',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
 });

@@ -3,9 +3,17 @@ import type { SearchResponse } from '@/types/api';
 import { http } from './client';
 
 export const searchApi = {
-  search: async (q: string, limit = 10): Promise<SearchResponse> => {
+  search: async (
+    q: string,
+    limit = 10,
+    workspaceId?: string | null,
+  ): Promise<SearchResponse> => {
     const { data } = await http.get<SearchResponse>('/search', {
-      params: { q, limit },
+      params: {
+        q,
+        limit,
+        ...(workspaceId ? { workspaceId } : {}),
+      },
     });
     return data;
   },
