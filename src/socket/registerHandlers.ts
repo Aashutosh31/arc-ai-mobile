@@ -34,6 +34,23 @@ export function registerSocketHandlers(socket: Socket): () => void {
     offs.push(() => socket.off(event, handler));
   };
 
+  // Durable plan history: persisted server-side, so a cold start/reconnect
+  // recovers resumable tasks instead of losing them with chat memory.
+  const refreshPlans = () => {
+    const activeWorkspaceId = useWorkspaceStore.getState().active?._id ?? 'global';
+    socket.emit(
+      SOCKET_EVENTS.executionList,
+      { workspaceId: activeWorkspaceId, limit: 12 },
+      (res: Any) => {
+        if (res?.ok) {
+          useExecutionStore
+            .getState()
+            .setPlans(Array.isArray(res.plans) ? res.plans : []);
+        }
+      },
+    );
+  };
+
   // ---- Chat streaming -------------------------------------------------------
   on(SOCKET_EVENTS.responseChunk, (payload: Any) => {
     const delta = s(payload?.displayText) || s(payload?.chunk) || s(payload?.text);
@@ -159,6 +176,7 @@ export function registerSocketHandlers(socket: Socket): () => void {
       useWorkspaceStore.getState().setActive(workspace);
       void useConversationStore.getState().load();
       chat().reset();
+      refreshPlans();
     }
   });
 
@@ -215,24 +233,33 @@ export function registerSocketHandlers(socket: Socket): () => void {
       error: s(payload?.error),
     }),
   );
-  on(SOCKET_EVENTS.executionBlocked, (payload: Any) =>
+  on(SOCKET_EVENTS.executionBlocked, (payload: Any) => {
     useExecutionStore.getState().setBlocked({
       executionId: s(payload?.executionId),
       reason: s(payload?.reason),
-    }),
-  );
-  on(SOCKET_EVENTS.executionCompleted, (payload: Any) =>
+    });
+    refreshPlans();
+  });
+  on(SOCKET_EVENTS.executionCompleted, (payload: Any) => {
     useExecutionStore.getState().setCompleted({
       executionId: s(payload?.executionId),
       status: s(payload?.status) || 'COMPLETED',
       reason: s(payload?.reason),
-    }),
-  );
-  on(SOCKET_EVENTS.executionFailed, (payload: Any) =>
+    });
+    refreshPlans();
+  });
+  on(SOCKET_EVENTS.executionFailed, (payload: Any) => {
     useExecutionStore.getState().setCompleted({
       executionId: s(payload?.executionId),
       status: 'FAILED',
       reason: s(payload?.reason) || s(payload?.error),
+    });
+    refreshPlans();
+  });
+  on(SOCKET_EVENTS.executionResumed, (payload: Any) =>
+    useExecutionStore.getState().setResumed({
+      executionId: s(payload?.executionId),
+      workspaceId: payload?.workspaceId ?? null,
     }),
   );
   on(SOCKET_EVENTS.executionReplan, (payload: Any) =>
@@ -242,6 +269,8 @@ export function registerSocketHandlers(socket: Socket): () => void {
       reason: s(payload?.reason),
     }),
   );
+
+  refreshPlans();
 
   return () => offs.forEach((fn) => fn());
 }

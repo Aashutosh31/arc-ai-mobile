@@ -26,10 +26,28 @@ export interface Execution {
   updatedAt: number;
 }
 
+export interface PlanSummary {
+  executionId: string;
+  title: string;
+  status: string;
+  workspaceId?: string | null;
+  stepCount?: number;
+  succeeded?: number;
+  failed?: number;
+  blocked?: number;
+  resumable?: boolean;
+  resumeCount?: number;
+  lastError?: string | null;
+  updatedAt?: string | null;
+}
+
 interface ExecutionState {
   executions: Execution[];
+  plans: PlanSummary[];
   upsertCreated: (p: { executionId: string; title?: string; steps?: { id: string; tool: string; status?: StepStatus }[]; workspaceId?: string | null }) => void;
   setStarted: (p: { executionId: string; workspaceId?: string | null }) => void;
+  setResumed: (p: { executionId: string; workspaceId?: string | null }) => void;
+  setPlans: (plans: PlanSummary[]) => void;
   stepStarted: (p: { executionId: string; stepId: string; tool?: string }) => void;
   stepCompleted: (p: { executionId: string; stepId: string; status: StepStatus; result?: unknown; tool?: string }) => void;
   stepFailed: (p: { executionId: string; stepId: string; error?: string }) => void;
@@ -53,6 +71,7 @@ const mutate = (
 
 export const useExecutionStore = create<ExecutionState>((set) => ({
   executions: [],
+  plans: [],
 
   upsertCreated: ({ executionId, title, steps, workspaceId }) =>
     set((s) => {
@@ -97,6 +116,37 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
         updatedAt: Date.now(),
       })),
     })),
+
+  setResumed: ({ executionId, workspaceId }) =>
+    set((s) => {
+      if (!executionId) return s;
+      const exists = s.executions.some((e) => e.executionId === executionId);
+      if (exists) {
+        return {
+          executions: mutate(s.executions, executionId, (e) => ({
+            ...e,
+            status: 'RUNNING',
+            workspaceId: workspaceId ?? e.workspaceId,
+            updatedAt: Date.now(),
+          })),
+        };
+      }
+      return {
+        executions: [
+          {
+            executionId,
+            title: 'Resumed plan',
+            status: 'RUNNING',
+            workspaceId: workspaceId ?? null,
+            steps: [],
+            updatedAt: Date.now(),
+          },
+          ...s.executions,
+        ],
+      };
+    }),
+
+  setPlans: (plans) => set({ plans: Array.isArray(plans) ? plans : [] }),
 
   stepStarted: ({ executionId, stepId, tool }) =>
     set((s) => ({
@@ -167,5 +217,5 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
       };
     }),
 
-  reset: () => set({ executions: [] }),
+  reset: () => set({ executions: [], plans: [] }),
 }));

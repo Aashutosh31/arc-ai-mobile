@@ -48,6 +48,9 @@ export const SOCKET_EVENTS = {
   executionBlocked: 'execution.blocked',
   executionCompleted: 'execution.completed',
   executionFailed: 'execution.failed',
+  executionResumed: 'execution.resumed',
+  executionList: 'execution.list',
+  executionResume: 'execution.resume',
   executionReplan: 'execution.replan.suggested',
 
   // WhatsApp

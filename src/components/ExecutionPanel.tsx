@@ -1,10 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/ui';
-import { useExecutionStore, type StepStatus } from '@/store/executionStore';
+import { SOCKET_EVENTS } from '@/socket/events';
+import { getSocket } from '@/socket/socketClient';
+import { useExecutionStore, type PlanSummary, type StepStatus } from '@/store/executionStore';
 import { useTheme } from '@/store/themeStore';
+import { useWorkspaceStore } from '@/store/workspaceStore';
 import { Spacing } from '@/theme/layout';
 
 const statusIcon: Record<StepStatus, keyof typeof Ionicons.glyphMap> = {
@@ -16,12 +19,42 @@ const statusIcon: Record<StepStatus, keyof typeof Ionicons.glyphMap> = {
   BLOCKED: 'lock-closed-outline',
 };
 
+const planIcon = (status: string): keyof typeof Ionicons.glyphMap => {
+  const key = String(status || '').toUpperCase();
+  if (key === 'RUNNING') return 'sync-outline';
+  if (key === 'COMPLETED') return 'checkmark-circle';
+  if (key === 'FAILED') return 'close-circle';
+  if (key === 'BLOCKED') return 'lock-closed-outline';
+  if (key === 'CANCELLED') return 'remove-circle-outline';
+  return 'ellipse-outline';
+};
+
 export function ExecutionPanel() {
   const theme = useTheme();
   const executions = useExecutionStore((s) => s.executions);
+  const plans = useExecutionStore((s) => s.plans);
+  const upsertCreated = useExecutionStore((s) => s.upsertCreated);
+  const setPlans = useExecutionStore((s) => s.setPlans);
+  const activeWorkspaceId = useWorkspaceStore((s) => s.active?._id ?? 'global');
   const [collapsed, setCollapsed] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!executions.length) return null;
+  // Refresh durable plan history when the panel mounts or the workspace
+  // changes, so resumable tasks survive a cold start/reconnect.
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+    socket.emit(
+      SOCKET_EVENTS.executionList,
+      { workspaceId: activeWorkspaceId, limit: 12 },
+      (res: { ok?: boolean; plans?: PlanSummary[] } | undefined) => {
+        if (res?.ok) setPlans(Array.isArray(res.plans) ? res.plans : []);
+      },
+    );
+  }, [activeWorkspaceId, setPlans]);
+
+  if (!executions.length && !plans.length) return null;
 
   const tone = (status: StepStatus | string) => {
     if (status === 'COMPLETED') return theme.success;
@@ -30,12 +63,42 @@ export function ExecutionPanel() {
     return theme.foregroundMuted;
   };
 
+  const handleResume = (plan: PlanSummary) => {
+    const socket = getSocket();
+    if (!socket) {
+      setError('Not connected.');
+      return;
+    }
+    setBusyId(plan.executionId);
+    setError(null);
+    // Seed the live execution immediately so the resumed plan appears in the
+    // activity list while the server replays its remaining steps.
+    upsertCreated({
+      executionId: plan.executionId,
+      title: plan.title,
+      workspaceId: plan.workspaceId ?? null,
+    });
+    socket.emit(
+      SOCKET_EVENTS.executionResume,
+      { executionId: plan.executionId, workspaceId: plan.workspaceId ?? null },
+      (res: { ok?: boolean; error?: string } | undefined) => {
+        setBusyId(null);
+        if (!res?.ok) setError(res?.error || 'Could not resume this task.');
+      },
+    );
+  };
+
+  const liveRunning = (plan: PlanSummary) =>
+    executions.some(
+      (exec) => exec.executionId === plan.executionId && exec.status === 'RUNNING',
+    );
+
   return (
     <View style={[styles.wrap, { borderColor: theme.border, backgroundColor: theme.surface }]}>
       <Pressable style={styles.header} onPress={() => setCollapsed((v) => !v)}>
         <Ionicons name="git-network-outline" size={16} color={theme.accent} />
         <ThemedText variant="label" style={{ flex: 1 }}>
-          Agent activity ({executions.length})
+          Agent activity ({executions.length || plans.length})
         </ThemedText>
         <Ionicons name={collapsed ? 'chevron-up' : 'chevron-down'} size={18} color={theme.foregroundMuted} />
       </Pressable>
@@ -82,6 +145,48 @@ export function ExecutionPanel() {
             </View>
           ))
         : null}
+
+      {!collapsed && plans.length ? (
+        <View style={{ gap: Spacing.xs, marginTop: Spacing.sm }}>
+          <ThemedText variant="caption" color={theme.foregroundMuted}>
+            Recent tasks
+          </ThemedText>
+          {plans.slice(0, 5).map((plan) => {
+            const canResume = Boolean(plan.resumable) && !liveRunning(plan);
+            const steps = plan.stepCount ? `${plan.succeeded ?? 0}/${plan.stepCount} steps` : 'no steps';
+            return (
+              <View key={plan.executionId} style={styles.planRow}>
+                <Ionicons name={planIcon(plan.status)} size={14} color={tone(plan.status)} />
+                <View style={{ flex: 1, gap: 1 }}>
+                  <ThemedText variant="muted" numberOfLines={1}>
+                    {plan.title}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.foregroundMuted} numberOfLines={1}>
+                    {String(plan.status || 'PLANNED').toLowerCase()} · {steps}
+                    {plan.lastError ? ` · ${plan.lastError}` : ''}
+                  </ThemedText>
+                </View>
+                {canResume ? (
+                  <Pressable
+                    onPress={() => handleResume(plan)}
+                    disabled={busyId === plan.executionId}
+                    style={[styles.resumeButton, { borderColor: theme.primary }]}>
+                    <ThemedText variant="caption" color={theme.primary}>
+                      {busyId === plan.executionId ? 'Resuming…' : 'Resume'}
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
+
+      {error ? (
+        <ThemedText variant="caption" color={theme.destructive} numberOfLines={2}>
+          {error}
+        </ThemedText>
+      ) : null}
     </View>
   );
 }
@@ -105,5 +210,19 @@ const styles = StyleSheet.create({
     paddingLeft: Spacing.sm,
     borderLeftWidth: 2,
     marginLeft: Spacing.xs,
+  },
+  planRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'transparent',
+  },
+  resumeButton: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
   },
 });
