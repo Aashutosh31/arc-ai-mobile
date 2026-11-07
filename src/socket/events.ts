@@ -53,6 +53,10 @@ export const SOCKET_EVENTS = {
   executionResume: 'execution.resume',
   executionReplan: 'execution.replan.suggested',
 
+  // Proactive autonomy (Phase 4)
+  jobUpdated: 'job.updated',
+  jobNotification: 'job.notification',
+
   // WhatsApp
   whatsappConnect: 'whatsapp:connect',
   whatsappPair: 'whatsapp:pair_with_phone',

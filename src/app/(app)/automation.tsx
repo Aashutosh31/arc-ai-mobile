@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Image, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button, Card, Screen, TextField, ThemedText } from '@/components/ui';
+import { JobsPanel } from '@/components/JobsPanel';
 import { SOCKET_EVENTS } from '@/socket/events';
 import { emitEvent, getSocket } from '@/socket/socketClient';
 import { useChatStore } from '@/store/chatStore';
@@ -145,6 +146,8 @@ export default function AutomationScreen() {
   return (
     <Screen>
       <ScrollView contentContainerStyle={styles.content}>
+        <JobsPanel />
+
         <Card style={styles.statusCard}>
           <View style={styles.row}>
             <Ionicons name="logo-whatsapp" size={22} color={theme.success} />
